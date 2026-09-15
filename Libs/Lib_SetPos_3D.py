@@ -85,10 +85,20 @@ def Set_SphPoss(SPs):
 
 def Set_CylPoss(SPs):
     nx = SPs['nx']
-    ny = SPs['ny']
     nz = SPs['nz']
     nCyl = SPs['nCyl']
-    RCyl = SPs['RCyl']
-    yCylbyR = SPs['yCylbyR']
-    Gap_P2P = SPs['Gap_P2P']
-    return CylPoss
+    HCyl = SPs['HCyl']
+    if nCyl != 1:
+        raise ValueError('CylinderQCM3D currently supports one periodic cylinder')
+    x_cyl = (nx-1)/2.
+    y_cyl = HCyl/2.
+    z_cyl = (nz-1)/2.
+    return np.array([[x_cyl],[y_cyl],[z_cyl]],dtype=np.float64)
+
+@jit(nopython=True)
+def DisLTDMin_CylinderQCM3D(nx,nz,x1,x2,y,z1,z2,DMin,height):
+    dx = abs(x1-x2)
+    dx = min(dx,nx-dx)
+    dz = abs(z1-z2)
+    dz = min(dz,nz-dz)
+    return dx**2 + dz**2 <= DMin**2 and 0. <= y <= height

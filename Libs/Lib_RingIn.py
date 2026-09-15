@@ -56,7 +56,8 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
         else:
             MatricesTop = Handle_Top.Calc_MatricesTop_2D(nx,nuBulk,om)
     if dimensions == 3: MatricesTop = Handle_Top.Calc_MatricesTop_3D(nx,nz,nuBulk,om)
-    FitInterval   = np.max([int(ny**2*0.05),10])
+    FitInterval = int(SPs.get('RingInFitIntervalSteps',0))
+    if FitInterval == 0: FitInterval = np.max([int(ny**2*0.05),10])
     PrintInterval = int(ny**2 * SPs['PrintIntervalFac'])
     PrintInterval = np.max([FitInterval,PrintInterval]) 
     FxCont_tot = 0
@@ -84,7 +85,7 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
             OscBndLocked,OscBndLockedTo,nSph,RSph,ySphbyR,rhoSph,iSiL_Lists = \
             OscBnd.Extract_OscBndPars(OscBndPars)
     B = None
-    if not is_cylinder2d:
+    if SPs['ProblemType'] == 'SoftParticles':
         B = Soft.compute_B(nx, ny, nz, int(SPs['nSph']), SPs['RSph'], SphPoss[0], SphPoss[1], SphPoss[2])
     while not Converged: 
         if Do_Ref : 
@@ -158,7 +159,7 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
 
         MotionPars_RI[step] = MotionPars 
      
-        if step%FitInterval == 0 and step >= 10 : 
+        if step%FitInterval == 0 and step >= max(FitInterval,2):
             if SPs['SigSmoothDfcbynsFac'] > 0 and step > 2*ny**2: 
                 sig = step*SPs['SigSmoothDfcbynsFac']   
                 i_ini =      int(np.max([10*sig,step/3.]))
@@ -262,7 +263,7 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                                      tauInvs,FracVolSph,SPs,SphPoss)
                 MotionPars_RI[step] = MotionPars
                 AuxPars_RI[   step] = AuxPars
-            if SPs['ProblemType'] in ['StiffParticles','Roughness','SFA']: 
+            if SPs['ProblemType'] in ['StiffParticles','Roughness','SFA','CylinderQCM3D']:
                 dr,ux,uy,uz = \
                     OscBnd.Calc_dr_ux_uy_uz_OscBnd(h,cxs,cys,czs,\
                         OutsideLBMDomains,InParticles,OscBndAmps,SPs)
@@ -273,7 +274,8 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 uy = np.zeros(ny)
                 uz = np.zeros(ny)
         
-            if SPs['ProblemType'] in ['SoftParticles','StiffParticles','Roughness','SFA'] :
+            if SPs['ProblemType'] in ['SoftParticles','StiffParticles','Roughness','SFA'] or \
+               (SPs['ProblemType'] == 'CylinderQCM3D' and SPs['Do_SavePlots']):
                 if SPs['Do_from_GUI'] :  
                     Plots_from_GUI.Plot_Fields_Horizontal(dr,ux,uy,uz,'Re($\Delta \\rho$)', 'Re(u$_{\mathrm{x}}$)','Re(u$_{\mathrm{y}}$)', 'Re(u$_{\mathrm{z}}$)',SPs,int(SPs['RSph']))
                     Plots_from_GUI.Plot_Fields_Vertical(dr,ux,uy,uz, 'Re($\Delta \\rho$)', 'Re(u$_{\mathrm{x}}$)','Re(u$_{\mathrm{y}}$)','Re(u$_{\mathrm{z}}$)',SPs)

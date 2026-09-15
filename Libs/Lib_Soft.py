@@ -98,7 +98,7 @@ def Set_RelaxPars(SPs):
     if dimensions == 1 : FracVolSph = Calc_FracVolSph_1D(SPs)
     if dimensions == 2 : FracVolSph = Calc_FracVolSph_2D(SPs)
     if dimensions == 3 :
-        if SPs['ProblemType'] in ['StiffParticles','SFA']:
+        if SPs['ProblemType'] in ['StiffParticles','SFA','CylinderQCM3D']:
             FracVolSph = np.zeros((nx,ny,nz),dtype=np.float64)
         if SPs['ProblemType'] == 'SoftParticles' :
             FracVolSph = Calc_FracVolSph_3D(SPs)

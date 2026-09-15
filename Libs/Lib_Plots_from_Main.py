@@ -20,6 +20,7 @@ def Plot_Fields_Horizontal(val1,val2,val3,val4,title1,title2,title3,title4,SPs,y
     if title4 != '': nplots += 1
     plt.rcParams["figure.figsize"] = (2.5*nplots,2.3)
     plt.rcParams["font.size"] = 10;
+    fig = plt.figure()
     X,Z = np.meshgrid(np.arange(int(SPs['nx'])), np.arange(int(SPs['nz'])))
     iplot = 1
     if title1 != '':
@@ -44,6 +45,7 @@ def Plot_Fields_Horizontal(val1,val2,val3,val4,title1,title2,title3,title4,SPs,y
                     str(SPs['iPar1'])+'_'+str(SPs['iPar2'])+'_'+\
                     str(SPs['iPar3'])+'_'+str(SPs['iovt'])+'_Horizontal.png')
     plt.show()
+    plt.close(fig)
 
 def Plot_Fields_Vertical(val1,val2,val3,val4,title1,title2,title3,title4,SPs):
     nplots = 0
@@ -53,6 +55,7 @@ def Plot_Fields_Vertical(val1,val2,val3,val4,title1,title2,title3,title4,SPs):
     if title4 != '': nplots += 1
     plt.rcParams["figure.figsize"] = (2.5*nplots,2.3)
     plt.rcParams["font.size"] = 10;
+    fig = plt.figure()
     zmid = int(SPs['nz']/2)
     X,Y = np.meshgrid(np.arange(SPs['nx']), np.arange(SPs['ny']))
     iplot = 1
@@ -78,6 +81,7 @@ def Plot_Fields_Vertical(val1,val2,val3,val4,title1,title2,title3,title4,SPs):
                     str(SPs['iPar1'])+'_'+str(SPs['iPar2'])+'_'+\
                     str(SPs['iPar3'])+'_'+str(SPs['iovt'])+'_Vertical.png')
     plt.show()
+    plt.close(fig)
 
 def Plot_Top(val1,val2,val3,val4,title1,title2,title3,title4,SPs):
     nplots = 0
@@ -139,6 +143,7 @@ def Plot_LinkProps_3D(xLs,yLs,zLs,color1,color2,color3,title1,title2,title3,SPs)
                     str(SPs['iPar1'])+'_'+str(SPs['iPar2'])+'_'+\
                     str(SPs['iPar3'])+'_'+str(SPs['iovt'])+'_LinkProps.png')
     plt.show()
+    plt.close(fig)
 
 def Plot_LinkProps_Roughness_2D(xLs,yLs,color1,color2,color3,title1,title2,title3,SPs):
     nplots = 0

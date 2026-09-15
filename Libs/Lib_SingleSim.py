@@ -5,6 +5,47 @@ from Libs import Lib_Soft      as Soft
 from Libs import Lib_OscBnd    as OscBnd
 from Libs import Lib_SetPos_3D as SetPos_3D
 
+def Handle_Geometry_CylinderQCM3D(SPs):
+    dx_nm = float(SPs['Dx_nm'])
+    radius_nm = float(SPs['RCyl_nm'])
+    cylinder_height_nm = float(SPs['HCyl_nm'])
+    width_nm = float(SPs['CylBoxWidth_nm'])
+    box_height_nm = float(SPs['CylBoxHeight_nm'])
+
+    if min(dx_nm, radius_nm, cylinder_height_nm, width_nm, box_height_nm) <= 0:
+        raise ValueError('Cylinder dimensions and Dx_nm must be positive')
+    if SPs['CylBoundaryCondition'] != 'PeriodicXZ':
+        raise ValueError("CylinderQCM3D requires CylBoundaryCondition='PeriodicXZ'")
+
+    width_lattice = width_nm / dx_nm
+    height_lattice = box_height_nm / dx_nm
+    nx = int(np.round(width_lattice))
+    ny = int(np.round(height_lattice))
+    if not np.isclose(width_lattice, nx) or not np.isclose(height_lattice, ny):
+        raise ValueError('Cylinder box dimensions must be integer multiples of Dx_nm')
+
+    radius = radius_nm / dx_nm
+    cylinder_height = cylinder_height_nm / dx_nm
+    if 2.0 * radius >= nx:
+        raise ValueError('Cylinder diameter must be smaller than the lateral period')
+    if cylinder_height >= ny - 1:
+        raise ValueError('Cylinder top must leave at least one liquid node below the upper boundary')
+
+    SPs['Width_nm'] = width_nm
+    SPs['Height_nm'] = box_height_nm
+    SPs['RCyl'] = radius
+    SPs['HCyl'] = cylinder_height
+    # Compatibility aliases let the established one-particle 3D path carry the cylinder.
+    SPs['nCyl'] = SPs['nSph'] = 1
+    SPs['RSph'] = radius
+    SPs['ySphbyR'] = cylinder_height/(2.*radius)
+    SPs['nx'] = SPs['nz'] = nx
+    SPs['ny'] = ny
+    SPs['CylPoss'] = SetPos_3D.Set_CylPoss(SPs)
+    SPs['SphPoss'] = SPs['CylPoss']
+    SPs['nNodes'] = nx * ny * nx
+    SPs['CoverageTrue'] = np.pi*radius**2/nx**2
+
 def Handle_Geometry_Cylinder2D(SPs):
     dx_nm = float(SPs['Dx_nm'])
     radius_nm = float(SPs['RCyl_nm'])
@@ -100,6 +141,7 @@ def SingleSimulation(SPs):
     General.Calc_tauInvBulk_ZBulk(SPs)
     General.Calc_etaabstandel(SPs)
     if SPs['ProblemType'] == 'StiffParticles' : OscBnd.Calc_SphRespPars_3D(SPs,OscBndPars)
+    if SPs['ProblemType'] == 'CylinderQCM3D' : OscBnd.Calc_CylRespPars_3D(SPs,OscBndPars)
 
     FracVolSph,tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos = \
         Soft.Set_RelaxPars(SPs)

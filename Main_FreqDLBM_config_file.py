@@ -46,6 +46,7 @@ DEFAULTS = {
     "TargetSlopeFitResults": 20.0,
     "MaxtbytRI": 100.0,
     "SigSmoothDfcbynsFac": 1e-2,
+    "RingInFitIntervalSteps": 0,
     "Lambda_TRT": 0.25,
     "Do_UseQuadraticTerm": True,
     "Do_Allow_rhoUneq1": False,
@@ -60,6 +61,7 @@ DEFAULTS = {
     "etaabscenSphmPas": 1e4,
     "tandelcenSph": 0.1,
     "RCyl_nm": 100.0,
+    "HCyl_nm": 200.0,
     "CylBoxWidth_nm": 4000.0,
     "CylBoxHeight_nm": 4000.0,
     "CylBoundaryCondition": "PeriodicXY",
@@ -121,12 +123,25 @@ PROBLEM_DEFAULTS = {
         "Do_Plot_RingIns": False,
         "nSph": 1,
     },
+    "CylinderQCM3D": {
+        "dimensions": 3,
+        "Dx_nm": 5.0,
+        "Do_OscBnd": True,
+        "OscBndLocked": True,
+        "OscBndLockedTo": "Substrate",
+        "CylBoundaryCondition": "PeriodicXZ",
+        "Do_SavePlots": False,
+        "Do_Plot_MotionPars": False,
+        "Do_Plot_RingIns": False,
+        "nSph": 1,
+    },
 }
 
 
 RESULT_PARAMETERS = {
     "default": ("etaabscenSphmPas", "tandelcenSph", "CovTarget"),
     "Cylinder2D": ("RCyl_nm", "CylBoxWidth_nm", "CylBoxHeight_nm"),
+    "CylinderQCM3D": ("RCyl_nm", "HCyl_nm", "CylBoxWidth_nm"),
 }
 
 
@@ -164,6 +179,9 @@ def _validate_config(config):
     for key in ("Dx_nm", "f0_SI", "Zq_SI", "delta0_nm"):
         if not isinstance(config[key], (int, float)) or config[key] <= 0:
             raise ValueError(f"{key} must be positive")
+    fit_interval = config["RingInFitIntervalSteps"]
+    if isinstance(fit_interval, bool) or not isinstance(fit_interval, int) or fit_interval < 0:
+        raise ValueError("RingInFitIntervalSteps must be a nonnegative integer")
 
 
 def initialize_sps(config):
@@ -191,6 +209,8 @@ def _prepare_geometry(sps):
         Single_Sim.Handle_Geometry_Spheres(sps)
     elif problem_type == "Cylinder2D":
         Single_Sim.Handle_Geometry_Cylinder2D(sps)
+    elif problem_type == "CylinderQCM3D":
+        Single_Sim.Handle_Geometry_CylinderQCM3D(sps)
     elif problem_type == "SFA":
         Single_Sim.Handle_Geometry_SFA(sps)
     elif problem_type in {"Roughness_2D", "Roughness_3D"}:

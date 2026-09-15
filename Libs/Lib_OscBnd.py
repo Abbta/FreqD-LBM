@@ -20,9 +20,14 @@ def Calc_Domains_3D(SPs):
         for y in range(ny):
             for z in range(nz):
                 for iS in range(nSph):
-                    if SetPos_3D.DisLTDMin3D(nx,ny,nz,x,xSphs[iS],\
-                                                      y,ySphs[iS],\
-                                                      z,zSphs[iS],RSph): 
+                    if SPs['ProblemType'] == 'CylinderQCM3D':
+                        inside = SetPos_3D.DisLTDMin_CylinderQCM3D(
+                            nx,nz,x,xSphs[iS],y,z,zSphs[iS],RSph,SPs['HCyl'])
+                    else:
+                        inside = SetPos_3D.DisLTDMin3D(nx,ny,nz,x,xSphs[iS],\
+                                                       y,ySphs[iS],\
+                                                       z,zSphs[iS],RSph)
+                    if inside:
                         OutsideLBMDomains[x,y,z]    = 1
                         InParticles[      x,y,z,iS] = 1
     return OutsideLBMDomains,InParticles
@@ -55,9 +60,13 @@ def Calc_qs_xLs_yLs_zLs_3D(nLstot,iSs,xGridLs,yGridLs,zGridLs,iGridLs,SphPoss,RS
             xt = (nx+x + threshold * (xmd-x))%nx
             yt =     y + threshold * (ymd-y)
             zt = (nz+z + threshold * (zmd-z))%nz
-            Outside = SetPos_3D.DisLTDMin3D(nx,ny,nz,xt,xSphs[iS],
-                                                     yt,ySphs[iS],
-                                                     zt,zSphs[iS],RSph) 
+            if SPs['ProblemType'] == 'CylinderQCM3D':
+                Outside = SetPos_3D.DisLTDMin_CylinderQCM3D(
+                    nx,nz,xt,xSphs[iS],yt,zt,zSphs[iS],RSph,SPs['HCyl'])
+            else:
+                Outside = SetPos_3D.DisLTDMin3D(nx,ny,nz,xt,xSphs[iS],
+                                                yt,ySphs[iS],
+                                                zt,zSphs[iS],RSph)
             if Outside: upbound = threshold
             else      : lobound = threshold
         qs[iL] = threshold         
@@ -144,10 +153,10 @@ def Set_BoundaryPars_3D(OutsideLBMDomains,InParticles,SPs):
         iSiL_Lists[iS,icounts[iS]] = iL
         icounts[iS] += 1
       
-    if SPs['Do_from_GUI'] :  
-        Plots.Plot_LinkProps_3D( xLs,yLs,zLs,yLs*SPs['Dx_nm'],' ',SPs)    
-    else :  
-        Plots_from_Main.Plot_LinkProps_3D(xLs,yLs,zLs,yLs*SPs['Dx_nm'],xLs,xLs,' ','','',SPs)    
+    if SPs['Do_from_GUI']:
+        Plots.Plot_LinkProps_3D( xLs,yLs,zLs,yLs*SPs['Dx_nm'],' ',SPs)
+    elif SPs['Do_SavePlots']:
+        Plots_from_Main.Plot_LinkProps_3D(xLs,yLs,zLs,yLs*SPs['Dx_nm'],xLs,xLs,' ','','',SPs)
     
     return i_BCs,nLs,nLstot,iSs,PoiLs,xGridLs,yGridLs,zGridLs,iGridLs,\
         xLs,yLs,zLs,qs,iSiL_Lists
@@ -165,7 +174,7 @@ def Ini_Motion_3D(nSph,nLstot,SPs):
     uzLs    = np.zeros((nLstot),dtype = np.complex128)
     return OscBndAmps,uxLs,uyLs,uzLs
 
-def Calc_SphRespPars_3D(SPs,OscBndPars): 
+def Calc_SphRespPars_3D(SPs,OscBndPars):
     nx        = SPs['nx']   
     ny        = SPs['ny']    
     nz        = SPs['nz']    
@@ -227,7 +236,25 @@ def Calc_SphRespPars_3D(SPs,OscBndPars):
         RCont,kappaShear,kappaBend,xiContShear,xiContVertl,xiContBendg,xiContTwist,\
         xiLiqTrans,xiLiqRotat,etaabsSph,tandelSph],dtype=np.complex128)
     OscBndPars['SphRespPars'] = SphRespPars
-    return 
+    return
+
+def Calc_CylRespPars_3D(SPs,OscBndPars):
+    """Populate the rigid-boundary record for a finite cylinder normal to the QCM."""
+    radius = SPs['RCyl']
+    height = SPs['HCyl']
+    center_y = SPs['CylPoss'][1,0]
+    mass = np.pi*radius**2*height*SPs['rhoSph']
+    ixx = mass*(3.*radius**2+height**2)/12.
+    iyy = 0.5*mass*radius**2
+    izz = ixx
+    response = np.zeros(16,dtype=np.complex128)
+    response[:5] = [center_y,mass,ixx,iyy,izz]
+    response[12] = 6.*np.pi*radius
+    response[13] = 8.*np.pi*radius
+    response[14] = SPs['etaabsSph']
+    response[15] = SPs['tandelSph']
+    OscBndPars['SphRespPars'] = response
+    return
 
 
 
@@ -398,7 +425,7 @@ def Update_Motion_3D(nLs,nLstot,iSs,xLs,yLs,zLs,uxLs,uyLs,uzLs,\
         else : 
             sigContactpol  = np.nan
             TzContbyAreaxR = np.nan
-    if OscBndLocked : 
+    if OscBndLocked:
         uySphs  = np.zeros(nSph,dtype = np.complex128)
         uzSphs  = np.zeros(nSph,dtype = np.complex128)
         OmxSphs = np.zeros(nSph,dtype = np.complex128)
@@ -421,6 +448,16 @@ def Update_Motion_3D(nLs,nLstot,iSs,xLs,yLs,zLs,uxLs,uyLs,uzLs,\
             Tx[iS] = Tx_Liq
             Ty[iS] = Ty_Liq
             Tz[iS] = Tz_Liq
+            if SPs['ProblemType'] == 'CylinderQCM3D' and OscBndLockedTo == 'Substrate':
+                # Hydrodynamic support force exerted by the QCM on the prescribed cylinder.
+                # Cylinder inertia is intentionally excluded, as in the locked-sphere hydro load.
+                FxCont[iS] = -Fx_Liq
+                FyCont[iS] = -Fy_Liq
+                FzCont[iS] = -Fz_Liq
+                Fx[iS] += FxCont[iS]
+                Fy[iS] += FyCont[iS]
+                Fz[iS] += FzCont[iS]
+                SPs['CylinderForceXOnCylinderByLiquid_LBM_Last'] = Fx_Liq
         OmzSph         = 0
         sigContactpol      = np.nan
         TzContbyAreaxR = np.nan
@@ -678,7 +715,7 @@ def Calc_dr_ux_uy_uz_OscBnd(h,cxs,cys,czs,OutsideLBMDomains,InParticles,OscBndAm
                     uy[x,y,z] = np.sum(h[x,y,z]*cys)
                     uz[x,y,z] = np.sum(h[x,y,z]*czs)
                 else: 
-                    if SPs['ProblemType'] == 'StiffParticles':
+                    if SPs['ProblemType'] in ['StiffParticles','CylinderQCM3D']:
                         dr[x,y,z],ux[x,y,z],uy[x,y,z],uz[x,y,z] = \
                             Calc_dr_ux_uy_uz_Rigid_StiffParticle(x,y,z,\
                                 InParticles,OscBndAmps,SPs)
