@@ -41,8 +41,7 @@ def Calc_FracVolSph_1D(SPs):
 def Calc_FracVolSph_2D(SPs):  
     nx = int(SPs['nx'])
     ny = int(SPs['ny'])
-    nz = int(SPs['nz'])
-    FracVolSph = np.zeros((nx,ny,nz),dtype=np.float64)
+    FracVolSph = np.zeros((nx,ny),dtype=np.float64)
     return FracVolSph      
 
 def Calc_FracVolSph_3D(SPs):  

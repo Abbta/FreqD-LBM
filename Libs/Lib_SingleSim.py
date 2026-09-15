@@ -5,6 +5,36 @@ from Libs import Lib_Soft      as Soft
 from Libs import Lib_OscBnd    as OscBnd
 from Libs import Lib_SetPos_3D as SetPos_3D
 
+def Handle_Geometry_Cylinder2D(SPs):
+    dx_nm = float(SPs['Dx_nm'])
+    radius_nm = float(SPs['RCyl_nm'])
+    width_nm = float(SPs['CylBoxWidth_nm'])
+    height_nm = float(SPs['CylBoxHeight_nm'])
+
+    if min(dx_nm, radius_nm, width_nm, height_nm) <= 0:
+        raise ValueError('Cylinder dimensions and Dx_nm must be positive')
+
+    nx_float = width_nm / dx_nm
+    ny_float = height_nm / dx_nm
+    nx = int(np.round(nx_float))
+    ny = int(np.round(ny_float))
+    if not np.isclose(nx_float, nx) or not np.isclose(ny_float, ny):
+        raise ValueError('Cylinder box dimensions must be integer multiples of Dx_nm')
+
+    radius = radius_nm / dx_nm
+    if 2.0 * radius >= min(nx, ny):
+        raise ValueError('The cylinder diameter must be smaller than both box dimensions')
+
+    SPs['Width_nm'] = width_nm
+    SPs['Height_nm'] = height_nm
+    SPs['RCyl'] = radius
+    SPs['nx'] = nx
+    SPs['ny'] = ny
+    SPs['nz'] = 1
+    SPs['CylPos'] = np.array([(nx - 1) / 2.0, (ny - 1) / 2.0])
+    SPs['nNodes'] = nx * ny
+    SPs['CoverageTrue'] = np.pi * radius**2 / (nx * ny)
+
 def Handle_Geometry_FilmResonance(SPs): # FilmResonance option not debugged
     SPs['Width_nm']     = np.nan
     SPs['RSph']         = np.nan
@@ -59,24 +89,28 @@ def SingleSimulation(SPs):
     # if SPs['ProblemType'] == 'FilmResonance'  : Handle_Geometry_FilmResonance(SPs)
 
     # OscBndPars = OscBnd.Setup_Boundaries_3D(SPs)
-    
+
     OscBndPars = SPs['OscBndPars']
 
     print('nx,ny,nz',SPs['nx'],SPs['ny'],SPs['nz'],'n',SPs['n'])
         # nu_for_om = 1./6.
-        # SPs['delta'] = SPs['delta0_nm'] / SPs['Dx_nm'] / SPs['n']**0.5  
+        # SPs['delta'] = SPs['delta0_nm'] / SPs['Dx_nm'] / SPs['n']**0.5
         # SPs['om']    = 2*nu_for_om / SPs['delta']**2
-        
+
     General.Calc_tauInvBulk_ZBulk(SPs)
     General.Calc_etaabstandel(SPs)
-    if SPs['ProblemType'] == 'StiffParticles' : OscBnd.Calc_SphRespPars_3D(SPs,OscBndPars)        
-        
+    if SPs['ProblemType'] == 'StiffParticles' : OscBnd.Calc_SphRespPars_3D(SPs,OscBndPars)
+
     FracVolSph,tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos = \
-        Soft.Set_RelaxPars(SPs)              
-        
+        Soft.Set_RelaxPars(SPs)
+
+    if SPs['ProblemType'] != 'Cylinder2D':
+        RingIn.RingIn(SPs,FracVolSph,OscBndPars,\
+            tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos,Do_Ref = True)
+        print('Dfcbyn_Ref' ,np.round(SPs['Dfcbyn_Ref' ],3),\
+                 'Dfratio_Ref',np.round(SPs['Dfratio_Ref'],3))
+    else:
+        SPs['Dfcbyn_Ref'] = 0
+        SPs['Dfratio_Ref'] = np.nan
     RingIn.RingIn(SPs,FracVolSph,OscBndPars,\
-        tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos,Do_Ref = True)
-    print('Dfcbyn_Ref' ,np.round(SPs['Dfcbyn_Ref' ],3),\
-             'Dfratio_Ref',np.round(SPs['Dfratio_Ref'],3))
-    RingIn.RingIn(SPs,FracVolSph,OscBndPars,\
-        tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos,Do_Ref = False)     
+        tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos,Do_Ref = False)

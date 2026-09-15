@@ -569,6 +569,19 @@ def Extract_OscBndPars(OscBndPars):
     return iSs,nLs,nLstot,xLs,yLs,zLs,OutsideLBMDomains,InParticles,i_BCs,PoiLs,qs,uxLs,uyLs,uzLs,\
         OscBndAmps,SphRespPars,UpdateMotionFac,OscBndLocked,OscBndLockedTo,\
         nSph,RSph,ySphbyR,rhoSph,iSiL_Lists
+
+
+def Extract_OscBndPars_Cylinder2D(OscBndPars):
+    nLstot            = OscBndPars['nLstot']
+    xLs               = OscBndPars['xLs']
+    yLs               = OscBndPars['yLs']
+    OutsideLBMDomains = OscBndPars['OutsideLBMDomains']
+    i_BCs             = OscBndPars['i_BCs']
+    PoiLs             = OscBndPars['PoiLs']
+    qs                = OscBndPars['qs']
+    uxLs              = OscBndPars['uxLs']
+    uyLs              = OscBndPars['uyLs']
+    return nLstot,xLs,yLs,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs
         
 
 def Setup_Boundaries_3D(SPs):
@@ -676,6 +689,121 @@ def Calc_dr_ux_uy_uz_OscBnd(h,cxs,cys,czs,OutsideLBMDomains,InParticles,OscBndAm
                         dr[x,y,z] = ux[x,y,z] = uy[x,y,z] = uz[x,y,z] = 0
     return dr,ux,uy,uz                
 
+def Calc_Domains_Cylinder2D(SPs):
+    nx = SPs['nx']
+    ny = SPs['ny']
+    x_cyl, y_cyl = SPs['CylPos']
+    radius = SPs['RCyl']
+
+    x = np.arange(nx, dtype=np.float64)[:, None]
+    y = np.arange(ny, dtype=np.float64)[None, :]
+    dx = (x - x_cyl + nx / 2.0) % nx - nx / 2.0
+    dy = (y - y_cyl + ny / 2.0) % ny - ny / 2.0
+    return (dx**2 + dy**2 <= radius**2).astype(np.int64)
+
+
+def Calc_qs_xLs_yLs_Cylinder2D(nLstot, xGridLs, yGridLs, iGridLs, SPs):
+    _, cxs, cys, _, _, _, _, _, _, _ = General.ReadStencil(SPs['dimensions'])
+    nx = SPs['nx']
+    ny = SPs['ny']
+    x_cyl, y_cyl = SPs['CylPos']
+    radius = SPs['RCyl']
+    qs = np.zeros(nLstot, dtype=np.float64)
+    xLs = np.zeros(nLstot, dtype=np.float64)
+    yLs = np.zeros(nLstot, dtype=np.float64)
+
+    for iL in range(nLstot):
+        x = xGridLs[iL]
+        y = yGridLs[iL]
+        i = iGridLs[iL]
+        dx = (x - x_cyl + nx / 2.0) % nx - nx / 2.0
+        dy = (y - y_cyl + ny / 2.0) % ny - ny / 2.0
+        a = cxs[i]**2 + cys[i]**2
+        b = -2.0 * (dx * cxs[i] + dy * cys[i])
+        c = dx**2 + dy**2 - radius**2
+        discriminant = b**2 - 4.0 * a * c
+        if discriminant < 0:
+            raise ValueError('Cylinder surface link does not intersect the circle')
+        q = (-b - discriminant**0.5) / (2.0 * a)
+        if q < 0.0 or q > 1.0:
+            q = (-b + discriminant**0.5) / (2.0 * a)
+        if q < 0.0 or q > 1.0:
+            raise ValueError('Cylinder surface intersection lies outside its lattice link')
+        qs[iL] = q
+        xLs[iL] = (x - q * cxs[i]) % nx
+        yLs[iL] = (y - q * cys[i]) % ny
+    return qs, xLs, yLs
+
+
+def Set_BoundaryPars_Cylinder2D(OutsideLBMDomains, SPs):
+    nx = SPs['nx']
+    ny = SPs['ny']
+    nd, cxs, cys, _, _, _, _, _, _, _ = General.ReadStencil(SPs['dimensions'])
+    i_BCs = np.zeros((nx, ny, nd), dtype=np.int64)
+    PoiLs = np.zeros((nx, ny, nd), dtype=np.int64)
+    surface_links = []
+
+    for x in range(nx):
+        for y in range(ny):
+            if OutsideLBMDomains[x, y]:
+                continue
+            for i in range(nd):
+                xmd = (x - cxs[i]) % nx
+                ymd = (y - cys[i]) % ny
+                if not OutsideLBMDomains[xmd, ymd]:
+                    i_BCs[x, y, i] = 1
+                    continue
+                xpd = (x + cxs[i]) % nx
+                ypd = (y + cys[i]) % ny
+                i_BCs[x, y, i] = 4 if not OutsideLBMDomains[xpd, ypd] else 5
+                PoiLs[x, y, i] = len(surface_links)
+                surface_links.append((x, y, i))
+
+    nLstot = len(surface_links)
+    xGridLs = np.fromiter((link[0] for link in surface_links), dtype=np.int64,
+                          count=nLstot)
+    yGridLs = np.fromiter((link[1] for link in surface_links), dtype=np.int64,
+                          count=nLstot)
+    iGridLs = np.fromiter((link[2] for link in surface_links), dtype=np.int64,
+                          count=nLstot)
+    qs, xLs, yLs = Calc_qs_xLs_yLs_Cylinder2D(
+        nLstot, xGridLs, yGridLs, iGridLs, SPs
+    )
+    return i_BCs, nLstot, PoiLs, xGridLs, yGridLs, iGridLs, xLs, yLs, qs
+
+
+def Setup_Boundaries_Cylinder2D(SPs):
+    if SPs['CylBoundaryCondition'] != 'PeriodicXY':
+        raise ValueError("Cylinder2D currently supports only 'PeriodicXY'")
+
+    OutsideLBMDomains = Calc_Domains_Cylinder2D(SPs)
+    i_BCs, nLstot, PoiLs, xGridLs, yGridLs, iGridLs, xLs, yLs, qs = \
+        Set_BoundaryPars_Cylinder2D(OutsideLBMDomains, SPs)
+    uxLs = np.full(nLstot, SPs['CylUx_LBM'], dtype=np.complex128)
+    # The D2Q9 code calls its second in-plane component y; physically it is z here.
+    uyLs = np.full(nLstot, SPs['CylUz_LBM'], dtype=np.complex128)
+    uzLs = np.zeros(nLstot, dtype=np.complex128)
+
+    return {
+        'nLstot': nLstot,
+        'xLs': xLs,
+        'yLs': yLs,
+        'OutsideLBMDomains': OutsideLBMDomains,
+        'i_BCs': i_BCs,
+        'PoiLs': PoiLs,
+        'qs': qs,
+        'uxLs': uxLs,
+        'uyLs': uyLs,
+        'uzLs': uzLs,
+        'xGridLs': xGridLs,
+        'yGridLs': yGridLs,
+        'iGridLs': iGridLs,
+        'CylPos': SPs['CylPos'],
+        'RCyl': SPs['RCyl'],
+        'CylBoundaryCondition': SPs['CylBoundaryCondition'],
+    }
+
+
 def Calc_Domains_2D(SPs):
     nx = SPs['nx']   
     ny = SPs['ny']    
@@ -772,3 +900,16 @@ def Update_Motion_2D(nLstot,FxLs):
     MotionPars = np.array([np.nan]); MotionParsTitles = [''];     
     AuxPars    = np.array([np.nan]); AuxParsTitles    = ['']; 
     return uxLs,uyLs,FxLiq,MotionPars,MotionParsTitles,AuxPars,AuxParsTitles
+
+
+def Update_Motion_Cylinder2D(nLstot,FxLs,FyLs,uxLs,uyLs):
+    FxOnFluid = np.sum(FxLs)
+    FzOnFluid = np.sum(FyLs)
+    FxCyl = -FxOnFluid
+    FzCyl = -FzOnFluid
+    MotionPars = np.array([FxCyl,FzCyl,FxOnFluid,FzOnFluid,np.nan,np.nan],dtype=np.complex128)
+    MotionParsTitles = ['$F_{x,CylByLiq}/L$','$F_{z,CylByLiq}/L$',
+                        '$F_{x,LiqByCyl}/L$','$F_{z,LiqByCyl}/L$','','']
+    AuxPars = np.array([np.nan,np.nan,np.nan,np.nan,np.nan,np.nan],dtype=np.complex128)
+    AuxParsTitles = ['','','','','','']
+    return uxLs,uyLs,FxCyl,FzCyl,MotionPars,MotionParsTitles,AuxPars,AuxParsTitles

@@ -21,9 +21,15 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
     om              = np.float64(SPs['om']) 
     tauInvBulk      = np.complex128(SPs['tauInvBulk'])
     UpdateMotionFac = np.float64(SPs['UpdateMotionFac'])
-    SphPoss         = np.float64(SPs['SphPoss'])
+    if SPs['ProblemType'] == 'Cylinder2D':
+        SphPoss = None
+    else:
+        SphPoss = np.float64(SPs['SphPoss'])
     dimensions      = SPs['dimensions']
+    is_cylinder2d   = SPs['ProblemType'] == 'Cylinder2D'
     Do_Plot_RingIns = SPs['Do_Plot_RingIns']
+    if Do_Ref and is_cylinder2d:
+        raise ValueError('Cylinder2D does not use the planar QCM reference run')
     if Do_Ref : Increased_Precision_Fac = 0.1
     else      : Increased_Precision_Fac = 1
     if Do_Ref : 
@@ -44,7 +50,11 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
 
     nuBulk = (1./tauInvBulk-0.5)/3.
     if dimensions == 1: MatricesTop = np.nan
-    if dimensions == 2: MatricesTop = Handle_Top.Calc_MatricesTop_2D(nx,nuBulk,om)
+    if dimensions == 2:
+        if is_cylinder2d:
+            MatricesTop = np.nan
+        else:
+            MatricesTop = Handle_Top.Calc_MatricesTop_2D(nx,nuBulk,om)
     if dimensions == 3: MatricesTop = Handle_Top.Calc_MatricesTop_3D(nx,nz,nuBulk,om)
     FitInterval   = np.max([int(ny**2*0.05),10])
     PrintInterval = int(ny**2 * SPs['PrintIntervalFac'])
@@ -56,21 +66,26 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
     h1 = np.zeros((ny,nd),dtype = np.complex128)
 
     tbytRI_Extrapols = np.ones( 1000 * ny**2                 )*np.nan
-    Dfcbyn_Extrapols = np.ones( 1000 * ny**2   ,dtype=complex)*np.nan
+    Response_Extrapols = np.ones( 1000 * ny**2   ,dtype=complex)*np.nan
     tbytRI_RIs       = np.ones( 1000 * ny**2                 )*np.nan
-    Dfcbyn_RIs       = np.ones( 1000 * ny**2   ,dtype=complex)*np.nan
+    Response_RIs     = np.ones( 1000 * ny**2   ,dtype=complex)*np.nan
     MotionPars_RI    = np.ones((1000 * ny**2,6),dtype=complex)*np.nan
     AuxPars_RI       = np.ones((1000 * ny**2,6),dtype=complex)*np.nan
     MotionParTitles = ['','','','','','']
     AuxParTitles    = ['','','','','','']
 
     time0=time.time(); countFits = 0; step = 0; Converged = False;
-    if not Do_Ref and SPs['Do_OscBnd'] : 
+    if not Do_Ref and SPs['Do_OscBnd'] and is_cylinder2d:
+        nLstot,xLs,yLs,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs = \
+            OscBnd.Extract_OscBndPars_Cylinder2D(OscBndPars)
+    if not Do_Ref and SPs['Do_OscBnd'] and not is_cylinder2d: 
         iSs,nLs,nLstot,xLs,yLs,zLs,OutsideLBMDomains,InParticles,i_BCs,PoiLs,\
             qs,uxLs,uyLs,uzLs,OscBndAmps,SphRespPars,UpdateMotionFac,\
             OscBndLocked,OscBndLockedTo,nSph,RSph,ySphbyR,rhoSph,iSiL_Lists = \
             OscBnd.Extract_OscBndPars(OscBndPars)
-    B = Soft.compute_B(nx, ny, nz, int(SPs['nSph']), SPs['RSph'], SphPoss[0], SphPoss[1], SphPoss[2])
+    B = None
+    if not is_cylinder2d:
+        B = Soft.compute_B(nx, ny, nz, int(SPs['nSph']), SPs['RSph'], SphPoss[0], SphPoss[1], SphPoss[2])
     while not Converged: 
         if Do_Ref : 
             h1,Fx_on_Wall = StrColl.FD_LBM_Step_Ref(h1,ny,nd,cxs,cys,czs,wi,ibars,\
@@ -91,13 +106,22 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                             FxLs,FyLs,FzLs,nSph,om,\
                             OscBndAmps,SphPoss,SphRespPars,\
                             UpdateMotionFac,OscBndLocked,OscBndLockedTo,iSiL_Lists,n,SPs)
-                if SPs['dimensions'] == 2: 
-                    h,Fx_on_Wall,FxLs,FyLs = \
-                        StrColl.FreqDLBMStep_OscBnd_2D(h,nx,ny,nd,cxs,cys,czs,wi,ibars,MatricesTop,\
-                            nLstot,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs,uzLs,\
-                            tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym)
-                    uxLs,uyLs,FxLiq,MotionPars,MotionParTitles,AuxPars,AuxParTitles = \
-                        OscBnd.Update_Motion_2D(nLstot,FxLs)
+                if SPs['dimensions'] == 2:
+                    if is_cylinder2d:
+                        h,FxLs,FyLs = \
+                            StrColl.FreqDLBMStep_OscBnd_Cylinder2D(h,nx,ny,nd,cxs,cys,wi,ibars,\
+                                nLstot,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs,\
+                                tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym)
+                        uxLs,uyLs,FxCyl,FzCyl,MotionPars,MotionParTitles,AuxPars,AuxParTitles = \
+                            OscBnd.Update_Motion_Cylinder2D(nLstot,FxLs,FyLs,uxLs,uyLs)
+                        Fx_on_Wall = np.zeros(nx,dtype=np.complex128)
+                    else:
+                        h,Fx_on_Wall,FxLs,FyLs = \
+                            StrColl.FreqDLBMStep_OscBnd_2D(h,nx,ny,nd,cxs,cys,czs,wi,ibars,MatricesTop,\
+                                nLstot,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs,uzLs,\
+                                tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym)
+                        uxLs,uyLs,FxLiq,MotionPars,MotionParTitles,AuxPars,AuxParTitles = \
+                            OscBnd.Update_Motion_2D(nLstot,FxLs)
             if not SPs['Do_OscBnd']  : 
                 if SPs['ProblemType'] == 'SoftParticles' : 
                     h,Fx_on_Wall = \
@@ -111,18 +135,21 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                                 tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym)
                 MotionPars = np.ones(6,dtype = complex)*np.nan            
                 AuxPars    = np.ones(6,dtype = complex)*np.nan            
-        DfcbynRaw = General.Calc_Dfcbyn(SPs,Fx_on_Wall,FxCont_tot,Do_Ref)
+        if is_cylinder2d and not Do_Ref:
+            ResponseRaw = FxCyl
+        else:
+            ResponseRaw = General.Calc_Dfcbyn(SPs,Fx_on_Wall,FxCont_tot,Do_Ref)
         if step >= len(tbytRI_RIs) - 1: 
             tbytRI_RIs       = np.append(tbytRI_RIs      ,np.ones( 1000 * ny**2                  )*np.nan)
-            Dfcbyn_RIs       = np.append(Dfcbyn_RIs      ,np.ones( 1000 * ny**2   ,dtype= complex)*np.nan)
+            Response_RIs     = np.append(Response_RIs    ,np.ones( 1000 * ny**2   ,dtype= complex)*np.nan)
             tbytRI_Extrapols = np.append(tbytRI_Extrapols,np.ones( 1000 * ny**2                  )*np.nan)
-            Dfcbyn_Extrapols = np.append(Dfcbyn_Extrapols,np.ones( 1000 * ny**2   ,dtype= complex)*np.nan)
+            Response_Extrapols = np.append(Response_Extrapols,np.ones(1000 * ny**2,dtype=complex)*np.nan)
             MotionPars_RI    = np.append(MotionPars_RI   ,np.ones((1000 * ny**2,6),dtype= complex)*np.nan)
             AuxPars_RI       = np.append(AuxPars_RI      ,np.ones((1000 * ny**2,6),dtype= complex)*np.nan)
 
         tbytRI_RIs[step] = float(step)/ny**2
-        if Do_Ref : Dfcbyn_RIs[step] = DfcbynRaw
-        else      : Dfcbyn_RIs[step] = DfcbynRaw - SPs['Dfcbyn_Ref']
+        if Do_Ref or is_cylinder2d : Response_RIs[step] = ResponseRaw
+        else                       : Response_RIs[step] = ResponseRaw - SPs['Dfcbyn_Ref']
         
         # with open(SPs['folder']+'\\errors1.txt', "a") as f:
         #     print('step               : ', step, file=f) 
@@ -137,34 +164,34 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 i_ini =      int(np.max([10*sig,step/3.]))
                 i_fin = step-int(10*sig)
                 tbytRI_RIs4Fit = tbytRI_RIs[i_ini:i_fin]
-                Dfcbyn_RIs4Fit = gaussian_filter(Dfcbyn_RIs,sigma=sig)
-                Dfcbyn_RIs4Fit = Dfcbyn_RIs4Fit[i_ini:i_fin]
+                Response_RIs4Fit = gaussian_filter(Response_RIs,sigma=sig)
+                Response_RIs4Fit = Response_RIs4Fit[i_ini:i_fin]
             else : 
                 i_ini = int(step/3.)
                 tbytRI_RIs4Fit = tbytRI_RIs[i_ini:step]
-                Dfcbyn_RIs4Fit = Dfcbyn_RIs[i_ini:step]     
+                Response_RIs4Fit = Response_RIs[i_ini:step]     
             try :     
-                Dfcbyn_Extrapol,StdErr_Extrapol,amplitude,om_complex,Dfcbyn_RI_Fit = \
-                    FitRI.Fit_RI(tbytRI_RIs4Fit,Dfcbyn_RIs4Fit)
+                Response_Extrapol,StdErr_Extrapol,amplitude,om_complex,Response_RI_Fit = \
+                    FitRI.Fit_RI(tbytRI_RIs4Fit,Response_RIs4Fit)
             except : 
-                Dfcbyn_Extrapol = np.nan
+                Response_Extrapol = np.nan
                 amplitude       = np.nan
                 om_complex      = np.nan
-                Dfcbyn_RI_Fit   = np.nan
+                Response_RI_Fit = np.nan
             countFits += 1    
             tbytRI_Extrapols[countFits] = step/ny**2
-            Dfcbyn_Extrapols[countFits] = Dfcbyn_Extrapol
+            Response_Extrapols[countFits] = Response_Extrapol
             
         if step%PrintInterval == 0 and step > 10:
             DriftFitResults40perc,DriftFitResults20perc = \
-                FitRI.Calc_DriftFitResults(SPs,tbytRI_Extrapols,Dfcbyn_Extrapols,\
+                FitRI.Calc_DriftFitResults(SPs,tbytRI_Extrapols,Response_Extrapols,\
                     amplitude,om_complex,countFits)
             if not Do_Ref : 
                 if Do_Plot_RingIns :  
                     if SPs['Do_from_GUI'] :  
-                        Plots_from_GUI.Plot_RI(tbytRI_RIs4Fit, Dfcbyn_RIs4Fit, Dfcbyn_RI_Fit,tbytRI_Extrapols, Dfcbyn_Extrapols,countFits, DriftFitResults40perc, DriftFitResults20perc, SPs)      
+                        Plots_from_GUI.Plot_RI(tbytRI_RIs4Fit, Response_RIs4Fit, Response_RI_Fit,tbytRI_Extrapols, Response_Extrapols,countFits, DriftFitResults40perc, DriftFitResults20perc, SPs)      
                     else :  
-                        Plots_from_Main.Plot_RI(tbytRI_RIs4Fit,Dfcbyn_RIs4Fit,Dfcbyn_RI_Fit,tbytRI_Extrapols,Dfcbyn_Extrapols,countFits)                    
+                        Plots_from_Main.Plot_RI(tbytRI_RIs4Fit,Response_RIs4Fit,Response_RI_Fit,tbytRI_Extrapols,Response_Extrapols,countFits)                    
                         
                 if SPs['Do_Plot_MotionPars'] and SPs['ProblemType'] == 'StiffParticles':                                                          
                     if SPs['Do_from_GUI'] :  
@@ -184,10 +211,14 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                    SPs['ProblemFlag']     = 0
                    SPs['steps']           = step
                    SPs['tbytRI']          = step/ny**2
-                   SPs['Dfcbyn_Extrapol'] = Dfcbyn_Extrapol
-                   SPs['Dfratio']         = Dfcbyn_Extrapol.imag / (-Dfcbyn_Extrapol.real)
+                   if is_cylinder2d:
+                       SPs['CylinderForcePerLengthXOnCylinderByLiquid_LBM'] = Response_Extrapol
+                       SPs['Dfratio']     = np.nan
+                   else:
+                       SPs['Dfcbyn_Extrapol'] = Response_Extrapol
+                       SPs['Dfratio']     = Response_Extrapol.imag / (-Response_Extrapol.real)
                    SPs['CompTimeMins'] = CompTimeMins
-            if np.abs(Dfcbyn_Extrapol) > 1e7 or step/ny**2> SPs['MaxtbytRI'] : 
+            if np.abs(Response_Extrapol) > 1e7 or step/ny**2> SPs['MaxtbytRI'] : 
                 CompTimeMins = np.round((time.time()-time0)/60,2);
                 print('np.abs(Dfcbyn_Fit) > 1e7 or tbytRI > MaxtbytRI',SPs['MaxtbytRI'])
                 #UPDATED
@@ -202,14 +233,25 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
         
     if Converged : 
         if Do_Ref :         
-            SPs['Dfcbyn_Ref'] = Dfcbyn_Extrapol
+            SPs['Dfcbyn_Ref'] = Response_Extrapol
             SPs['StdErr_Ref'] = StdErr_Extrapol
-            SPs['Dfratio_Ref'] = Dfcbyn_Extrapol.imag/(-Dfcbyn_Extrapol.real)
+            SPs['Dfratio_Ref'] = Response_Extrapol.imag/(-Response_Extrapol.real)
             dr = np.ones(ny)*np.nan
             ux = np.sum([h]*cxs,axis=1)
             uy = np.ones(ny)*np.nan
             uz = np.ones(ny)*np.nan
         if not Do_Ref : 
+            if is_cylinder2d:
+                dr = np.sum(h,axis=2,dtype=np.complex128)
+                ux = np.sum(h*cxs,axis=2,dtype=np.complex128)
+                uy = np.sum(h*cys,axis=2,dtype=np.complex128)
+                uz = np.zeros((nx,ny),dtype=np.complex128)
+                SPs['CylinderForcePerLengthZOnCylinderByLiquid_LBM_Last'] = FzCyl
+                if SPs['CylUx_LBM'] != 0:
+                    # Resistance opposes the imposed cylinder velocity.
+                    SPs['CylinderFrictionPerLength_LBM'] = -Response_Extrapol / SPs['CylUx_LBM']
+                else:
+                    SPs['CylinderFrictionPerLength_LBM'] = np.nan
             if SPs['ProblemType'] == 'SoftParticles' : 
                 dr,ux,uy,uz = Soft.Calc_dr_ux_uy_uz_SoftPt_3D(h,cxs,cys,czs,nx,ny,nz)
                 # MotionPars,MotionParTitles,AuxPars,AuxParTitles = \
@@ -253,7 +295,8 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
             MotionParsDict,AuxDict = IO.Make_MotionParsDict_AusParsDict(\
                 MotionPars_RI[step-1],MotionParTitles,\
                 AuxPars_RI[   step-1],AuxParTitles)
+            ResultLabel = 'CylinderForcePerLengthXOnCylinderByLiquid_LBM' if is_cylinder2d else 'Dfcbyn'
             print(SPs['iavg'],SPs['iPar1'],SPs['iPar2'],SPs['iPar3'],SPs['iovt'],\
-                'Dfcbyn',np.round(SPs['Dfcbyn_Extrapol'],3),'CompTimeMins',SPs['CompTimeMins'])
+                ResultLabel,np.round(Response_Extrapol,3),'CompTimeMins',SPs['CompTimeMins'])
             IO.Write_Config(SPs); IO.Save(SPs,MotionParsDict,AuxDict)    
     return   

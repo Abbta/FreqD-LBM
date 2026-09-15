@@ -155,7 +155,7 @@ def FreqDLBMStep_SoftPt_2D(h,nx,ny,\
                     - 6 * wi[i]*cys[ibar] * uyT[x]
     for x in range(nx):
         for y in range(ny): 
-            h[x,y] = Relax.Relax_2D(h_str[x,y],cxs,cys,czs,wi,ibars,\
+            h[x,y] = Relax.Relax_2D(h_str[x,y],cxs,cys,wi,ibars,\
             tauInvs[x,y],tauInvs_Asym[x,y],\
             one_m_tauInvs_m_Iom[x,y],one_m_tauInvs_m_Iom_Asym[x,y])
     return h,Fx_on_Wall
@@ -218,10 +218,61 @@ def FreqDLBMStep_OscBnd_2D(h,nx,ny,nd,cxs,cys,czs,wi,ibars,MatricesTop,\
     for x in range(nx):
         for y in range(ny): 
             if not OutsideLBMDomains[x,y]: 
-                h[x,y] = Relax.Relax_2D(h_str[x,y],cxs,cys,czs,wi,ibars,\
+                h[x,y] = Relax.Relax_2D(h_str[x,y],cxs,cys,wi,ibars,\
                 tauInvs[x,y],tauInvs_Asym[x,y],\
                 one_m_tauInvs_m_Iom[x,y],one_m_tauInvs_m_Iom_Asym[x,y])
     return h,Fx_on_Wall,FxLs,FyLs
+
+@jit(nopython = True)
+def FreqDLBMStep_OscBnd_Cylinder2D(h,nx,ny,nd,cxs,cys,wi,ibars,\
+        nLstot,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs,\
+        tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym):
+    h_str = np.zeros((nx,ny,nd),dtype = np.complex128)
+    FxLs  = np.zeros(nLstot,dtype = np.complex128)
+    FyLs  = np.zeros(nLstot,dtype = np.complex128)
+    for x in range(nx):
+        for y in range(ny):
+            if not OutsideLBMDomains[x,y]:
+                for i in range(nd):
+                    if i_BCs[x,y,i] == 1: # bulk, periodic x and physical z
+                        xmd = (nx+x-cxs[i])%nx
+                        ymd = (ny+y-cys[i])%ny
+                        h_str[x,y,i] = h[xmd,ymd,i]
+                    if i_BCs[x,y,i] == 4: # surface, no small gap
+                        ibar = ibars[i]
+                        iL = PoiLs[x,y,i]
+                        q = qs[iL]
+                        if q <= 0.5:
+                            xpd = (nx+x+cxs[i])%nx
+                            ypd = (ny+y+cys[i])%ny
+                            h_str[x,y,i] = (2.*q)*h[x,y,ibar]+\
+                                          (1.-2.*q)*h[xpd,ypd,ibar]
+                            h_str[x,y,i] -= 3.*2.*wi[ibar]*\
+                                (cxs[ibar]*uxLs[iL]+\
+                                 cys[ibar]*uyLs[iL])
+                        else:
+                            h_str[x,y,i] = 1./(2.*q)*h[x,y,ibar]+\
+                                         (1.-1./(2.*q))*h[x,y,i]
+                            h_str[x,y,i] -= 3./q*wi[ibar]*\
+                                (cxs[ibar]*uxLs[iL]+\
+                                 cys[ibar]*uyLs[iL])
+                        FxLs[iL] = (h_str[x,y,i]+h[x,y,ibar])*cxs[i]
+                        FyLs[iL] = (h_str[x,y,i]+h[x,y,ibar])*cys[i]
+                    if i_BCs[x,y,i] == 5: # surface, small gap
+                        ibar = ibars[i]
+                        iL = PoiLs[x,y,i]
+                        h_str[x,y,i] = h[x,y,ibar] -6*wi[ibar]*\
+                            (cxs[ibar]*uxLs[iL]+\
+                             cys[ibar]*uyLs[iL])
+                        FxLs[iL] = (h_str[x,y,i]+h[x,y,ibar])*cxs[i]
+                        FyLs[iL] = (h_str[x,y,i]+h[x,y,ibar])*cys[i]
+    for x in range(nx):
+        for y in range(ny):
+            if not OutsideLBMDomains[x,y]:
+                h[x,y] = Relax.Relax_2D(h_str[x,y],cxs,cys,wi,ibars,\
+                tauInvs[x,y],tauInvs_Asym[x,y],\
+                one_m_tauInvs_m_Iom[x,y],one_m_tauInvs_m_Iom_Asym[x,y])
+    return h,FxLs,FyLs
 
 @jit(nopython = True)
 def FreqDLBMStep_1D(h,ny,\

@@ -188,6 +188,12 @@ def Set_fname(SPs):
     SPs['fname'] = SPs['folder']+'/'+SPs['fname0'] +'_' + formatted +'.txt'
 
 def Create_and_Write_Header(SPs,MotionParsDict,AuxDict):
+    if SPs['ProblemType'] == 'Cylinder2D':
+        result_real = 'CylinderForcePerLengthXOnCylinderByLiquid_LBM_Re'
+        result_imag = 'CylinderForcePerLengthXOnCylinderByLiquid_LBM_Im'
+    else:
+        result_real = 'Dfbyn'
+        result_imag = 'DGbyn'
     header = 'iavg'+'\t'+\
         'i'+SPs['Par1str']+'\t'+\
         'i'+SPs['Par2str']+'\t'+\
@@ -197,8 +203,8 @@ def Create_and_Write_Header(SPs,MotionParsDict,AuxDict):
             SPs['Par2str']+'\t'+\
             SPs['Par3str']+'\t'+\
             'n'           +'\t'+\
-            'Dfbyn'       +'\t'+\
-            'DGbyn'       +'\t'+\
+            result_real   +'\t'+\
+            result_imag   +'\t'+\
             'nNodes'      +'\t'+\
             'steps'       +'\t'+\
             'tbytRI'      +'\t'+\
@@ -222,15 +228,19 @@ def Create_and_Write_Header(SPs,MotionParsDict,AuxDict):
     f = open(SPs['fname'][:-4]+'_Aux.txt','w+'); f.write(headerAux + '\n'); f.close()
 
 def Save(SPs,MotionParsDict,AuxDict):
-    if not os.path.isfile(SPs['fname']): 
+    if not os.path.isfile(SPs['fname']):
         print(os.path.basename(SPs['fname']))
         Create_and_Write_Header(SPs,MotionParsDict,AuxDict)
+    if SPs['ProblemType'] == 'Cylinder2D':
+        main_result = SPs['CylinderForcePerLengthXOnCylinderByLiquid_LBM']
+    else:
+        main_result = SPs['Dfcbyn_Extrapol']
     line = \
         str(SPs['iavg'])+'\t'+str(SPs['iPar1'])+'\t'+str(SPs['iPar2'])+'\t'+\
         str(SPs['iPar3'])+'\t'+str(SPs['iovt' ])+'\t'+\
         str(SPs[SPs['Par1str']])+'\t'+str(SPs[SPs['Par2str']])+'\t'+\
         str(SPs[SPs['Par3str']])+'\t'+str(SPs['n'])+'\t'+\
-        str(SPs['Dfcbyn_Extrapol'].real)+'\t'+str(SPs['Dfcbyn_Extrapol'].imag)+'\t' +\
+        str(main_result.real)+'\t'+str(main_result.imag)+'\t' +\
         str(SPs['nNodes'])+'\t'+str(SPs['steps'])+'\t'+\
         str(np.round(SPs['tbytRI'],1))+'\t'+str(SPs['CompTimeMins'])+'\t'+\
         str(SPs['ProblemFlag'])+'\t'+ str(SPs['CoverageTrue'])+'\t'+\
