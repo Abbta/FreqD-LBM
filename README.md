@@ -19,7 +19,8 @@ writer still receives one-value metadata internally. `Cylinder2D` has centered-c
 geometry with periodic boundaries in the physical x-z plane. It uses the existing
 ring-in and D2Q9 collision path. Its output is lattice-unit force per length on the
 cylinder by the liquid; friction per length is minus that force divided by velocity.
-Cylinder plots are off by default. Numerical verification remains to be done.
+`Do_SavePlots=true` saves a complex-velocity field plot. Cylinder plots are off by
+default. Numerical verification remains to be done.
 
 `CylinderQCM3D` adds one finite cylinder standing on the QCM with its axis along
 `y`, normal to the plate, and its circular base attached at `y=0`. Motion is along

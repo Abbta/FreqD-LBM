@@ -291,6 +291,9 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 #     'Re(u$_{\mathrm{z}}$)','',SPs)
 
 
+            if is_cylinder2d and SPs['Do_SavePlots']:
+                Plots_from_Main.Plot_Fields_Cylinder2D(ux,uy,SPs)
+
             if SPs['ProblemType'] == 'FilmResonance' :
                 pass #Plots.Plot_DisplacementField_1D(h,SPs)
 

@@ -2,6 +2,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 from Libs import Lib_General as General
 
+def Plot_Fields_Cylinder2D(ux,uz,SPs):
+    """Save real, imaginary, and amplitude views of the complex 2D velocity."""
+    nx, ny = int(SPs['nx']), int(SPs['ny'])
+    x, z = np.meshgrid(np.arange(nx), np.arange(ny), indexing='ij')
+    speed = np.sqrt(np.abs(ux)**2 + np.abs(uz)**2)
+    fig, axes = plt.subplots(2,3,figsize=(8.5,5.2),constrained_layout=True)
+    fields = ((ux.real, 'Re($u_x$)'), (ux.imag, 'Im($u_x$)'),
+              (uz.real, 'Re($u_z$)'), (uz.imag, 'Im($u_z$)'), (speed, '$|u|$'))
+    for axis, (field, title) in zip(axes.flat[:5], fields, strict=True):
+        image = axis.pcolormesh(x, z, field, shading='auto')
+        axis.set(title=title, xlabel='x', ylabel='z', aspect='equal')
+        fig.colorbar(image, ax=axis)
+    axes.flat[-1].set_visible(False)
+    if SPs['Do_SavePlots']:
+        fig.savefig('Cylinder2D_Velocity.png', dpi=180)
+    plt.show()
+    plt.close(fig)
+
 def Plot_Sph(nx,ny,nz,FracVolSph,SPs):
     SphPoss = SPs['SphPoss']
     yplot = int(SphPoss[1,0])

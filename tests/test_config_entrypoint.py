@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import Main_FreqDLBM_config_file as entry  # noqa: E402
+from Libs import Lib_Plots_from_Main as plots  # noqa: E402
 
 
 def test_defaults_and_overrides_are_one_case(tmp_path):
@@ -152,6 +153,19 @@ def test_locked_qcm_cylinder_transmits_hydrodynamic_force_to_qcm():
     assert sps["CylinderForceXOnCylinderByLiquid_LBM_Last"] == pytest.approx(
         -force_on_fluid
     )
+
+
+def test_cylinder_2d_velocity_plot_is_saved(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    plots.plt.switch_backend("Agg")
+    monkeypatch.setattr(plots.plt, "show", lambda: None)
+    velocity = np.ones((4, 5), dtype=complex) * (1.0 + 0.5j)
+    plots.Plot_Fields_Cylinder2D(
+        velocity,
+        np.zeros_like(velocity),
+        {"nx": 4, "ny": 5, "Do_SavePlots": True},
+    )
+    assert (tmp_path / "Cylinder2D_Velocity.png").is_file()
 
 
 def _defaults():
