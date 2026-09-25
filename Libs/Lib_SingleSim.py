@@ -149,6 +149,8 @@ def SingleSimulation(SPs):
     if SPs['ProblemType'] != 'Cylinder2D':
         RingIn.RingIn(SPs,FracVolSph,OscBndPars,\
             tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos,Do_Ref = True)
+        if SPs.get('ProblemFlag') != 0:
+            raise RuntimeError('Reference ring-in failed before the loaded simulation')
         print('Dfcbyn_Ref' ,np.round(SPs['Dfcbyn_Ref' ],3),\
                  'Dfratio_Ref',np.round(SPs['Dfratio_Ref'],3))
     else:

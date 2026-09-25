@@ -9,7 +9,16 @@ from Libs import Lib_FitRI           as FitRI
 from Libs import Lib_StreamCollide   as StrColl
 from Libs import Lib_IO              as IO
 from Libs import Lib_Plots_from_Main as Plots_from_Main 
-from Libs import Lib_Plots_for_GUI  as Plots_from_GUI 
+from Libs import Lib_Plots_for_GUI  as Plots_from_GUI
+
+
+def Response_Is_Unstable(ResponseRaw, limit=1e7):
+    """Detect divergence from the simulated response, not an early fit."""
+    return (
+        not np.isfinite(ResponseRaw.real)
+        or not np.isfinite(ResponseRaw.imag)
+        or np.abs(ResponseRaw) > limit
+    )
 
 def RingIn(SPs,FracVolSph,OscBndPars,\
         tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos,Do_Ref):
@@ -219,9 +228,9 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                        SPs['Dfcbyn_Extrapol'] = Response_Extrapol
                        SPs['Dfratio']     = Response_Extrapol.imag / (-Response_Extrapol.real)
                    SPs['CompTimeMins'] = CompTimeMins
-            if np.abs(Response_Extrapol) > 1e7 or step/ny**2> SPs['MaxtbytRI'] : 
+            if Response_Is_Unstable(ResponseRaw) or step/ny**2 > SPs['MaxtbytRI']:
                 CompTimeMins = np.round((time.time()-time0)/60,2);
-                print('np.abs(Dfcbyn_Fit) > 1e7 or tbytRI > MaxtbytRI',SPs['MaxtbytRI'])
+                print('Raw response diverged or tbytRI > MaxtbytRI',SPs['MaxtbytRI'])
                 #UPDATED
                 if SPs['Do_from_GUI']: Plots_from_GUI.SimError(SPs)
                 SPs['ProblemFlag']  = 1
