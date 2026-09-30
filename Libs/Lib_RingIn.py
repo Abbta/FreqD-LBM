@@ -20,6 +20,28 @@ def Response_Is_Unstable(ResponseRaw, limit=1e7):
         or np.abs(ResponseRaw) > limit
     )
 
+
+def Describe_RingIn_Stop(ResponseRaw, step, ny, max_tbytRI,
+                         Do_Ref, Response_Extrapol, countFits,
+                         DriftFitResults40perc, DriftFitResults20perc):
+    """Explain the existing stop test without changing its thresholds."""
+    raw_unstable = Response_Is_Unstable(ResponseRaw)
+    time_limit_exceeded = step / ny**2 > max_tbytRI
+    if not (raw_unstable or time_limit_exceeded):
+        return None
+    reasons = []
+    if raw_unstable:
+        reasons.append('raw_response_unstable')
+    if time_limit_exceeded:
+        reasons.append('max_ring_in_time_exceeded')
+    return (
+        f"Ring-in stopped: reason={'+'.join(reasons)} reference={Do_Ref} "
+        f"step={step} tbytRI={step / ny**2:.6g} limit={max_tbytRI} "
+        f"raw_response={ResponseRaw!r} fit_response={Response_Extrapol!r} "
+        f"fits={countFits} drift40={DriftFitResults40perc!r} "
+        f"drift20={DriftFitResults20perc!r}"
+    )
+
 def RingIn(SPs,FracVolSph,OscBndPars,\
         tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos,Do_Ref):
     nSph            = np.int64(SPs['nSph']) 
@@ -228,9 +250,15 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                        SPs['Dfcbyn_Extrapol'] = Response_Extrapol
                        SPs['Dfratio']     = Response_Extrapol.imag / (-Response_Extrapol.real)
                    SPs['CompTimeMins'] = CompTimeMins
-            if Response_Is_Unstable(ResponseRaw) or step/ny**2 > SPs['MaxtbytRI']:
+            stop_message = Describe_RingIn_Stop(
+                ResponseRaw, step, ny, SPs['MaxtbytRI'], Do_Ref,
+                Response_Extrapol, countFits,
+                DriftFitResults40perc, DriftFitResults20perc,
+            )
+            if stop_message is not None:
                 CompTimeMins = np.round((time.time()-time0)/60,2);
-                print('Raw response diverged or tbytRI > MaxtbytRI',SPs['MaxtbytRI'])
+                print(stop_message, flush=True)
+                SPs['RingInFailureReason'] = stop_message.split('reason=', 1)[1].split(' ', 1)[0]
                 #UPDATED
                 if SPs['Do_from_GUI']: Plots_from_GUI.SimError(SPs)
                 SPs['ProblemFlag']  = 1

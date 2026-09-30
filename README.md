@@ -32,3 +32,5 @@ The lateral periods are equal because the existing Fourier-top implementation
 assumes `nx == nz`.
 `RingInFitIntervalSteps=0` retains the normal size-derived fitting cadence;
 positive values explicitly set the cadence for bounded runtime experiments.
+If ring-in stops, stdout reports whether the raw response was unstable, the time
+limit was exceeded, or both, together with the raw response and fit drift.
