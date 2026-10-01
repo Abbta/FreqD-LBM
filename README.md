@@ -34,3 +34,11 @@ assumes `nx == nz`.
 positive values explicitly set the cadence for bounded runtime experiments.
 If ring-in stops, stdout reports whether the raw response was unstable, the time
 limit was exceeded, or both, together with the raw response and fit drift.
+`ReferenceMethod="direct"` solves the cylinder-free reference's stationary D3Q19
+equations as a sparse linear system; the default `"ring_in"` keeps the original
+iteration. The direct option supports 3D cases and records its residual and
+reference load. The loaded cylinder still uses ring-in and may independently fail.
+`ReferenceMethod="direct"` solves the cylinder-free reference's stationary D3Q19
+equations as a sparse linear system; the default `"ring_in"` keeps the original
+iteration. The direct option supports 3D cases and records its residual and
+reference load. The loaded cylinder still uses ring-in and may independently fail.

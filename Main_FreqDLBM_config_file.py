@@ -47,6 +47,7 @@ DEFAULTS = {
     "MaxtbytRI": 100.0,
     "SigSmoothDfcbynsFac": 1e-2,
     "RingInFitIntervalSteps": 0,
+    "ReferenceMethod": "ring_in",
     "Lambda_TRT": 0.25,
     "Do_UseQuadraticTerm": True,
     "Do_Allow_rhoUneq1": False,
@@ -174,6 +175,10 @@ def load_config(path):
 
 
 def _validate_config(config):
+    if config["ReferenceMethod"] not in ("ring_in", "direct"):
+        raise ValueError("ReferenceMethod must be 'ring_in' or 'direct'")
+    if config["ReferenceMethod"] == "direct" and config["dimensions"] != 3:
+        raise ValueError("Direct reference requires a D3Q19 problem")
     if isinstance(config["n"], bool) or not isinstance(config["n"], int) or config["n"] < 1:
         raise ValueError("n must be a positive integer")
     for key in ("Dx_nm", "f0_SI", "Zq_SI", "delta0_nm"):

@@ -1,6 +1,7 @@
 import numpy as np
 from Libs import Lib_General   as General
 from Libs import Lib_RingIn    as RingIn
+from Libs import Lib_Reference as Reference
 from Libs import Lib_Soft      as Soft
 from Libs import Lib_OscBnd    as OscBnd
 from Libs import Lib_SetPos_3D as SetPos_3D
@@ -147,8 +148,11 @@ def SingleSimulation(SPs):
         Soft.Set_RelaxPars(SPs)
 
     if SPs['ProblemType'] != 'Cylinder2D':
-        RingIn.RingIn(SPs,FracVolSph,OscBndPars,\
-            tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos,Do_Ref = True)
+        if SPs.get('ReferenceMethod', 'ring_in') == 'direct':
+            Reference.Solve_Direct(SPs)
+        else:
+            RingIn.RingIn(SPs,FracVolSph,OscBndPars,\
+                tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos,Do_Ref = True)
         if SPs.get('ProblemFlag') != 0:
             raise RuntimeError(
                 'Reference ring-in failed before the loaded simulation: '

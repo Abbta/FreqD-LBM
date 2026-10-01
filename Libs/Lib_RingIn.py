@@ -2,6 +2,7 @@ import numpy as np
 import time 
 from scipy.ndimage import gaussian_filter
 from Libs import Lib_General         as General
+from Libs import Lib_Reference       as Reference
 from Libs import Lib_Soft            as Soft
 from Libs import Lib_OscBnd          as OscBnd
 from Libs import Lib_Handle_Top      as Handle_Top
@@ -65,16 +66,8 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
     else      : Increased_Precision_Fac = 1
     if Do_Ref : 
         ZBulk      = SPs['ZBulk']
-        Lambda_TRT = SPs['Lambda_TRT']
-        tauInv_Ref = 1./tauInvBulk
-        if Lambda_TRT != 0 :  
-            tauInv_Asym_Ref = (4.-2.*tauInv_Ref)/(2.-tauInv_Ref+4*Lambda_TRT*tauInv_Ref)
-        else : tauInv_Asym_Ref = tauInv_Ref
-        one_m_tauInv_m_Iom_Ref      = 1 - tauInv_Ref - 1j*om
-        one_m_tauInv_m_Iom_Asym_Ref = 1 - tauInv_Ref - 1j*om
-
-        one_m_tauInv_m_Iom_Ref      += 5./2.*om**2
-        one_m_tauInv_m_Iom_Asym_Ref += 5./2.*om**2
+        tauInv_Ref,tauInv_Asym_Ref,one_m_tauInv_m_Iom_Ref,one_m_tauInv_m_Iom_Asym_Ref = \
+            Reference.Relaxation_Parameters(SPs)
         
     
     nd,cxs,cys,czs,ibars,wi,i_ups,i_notups,i_downs,i_notdowns = General.ReadStencil(SPs['dimensions'])      
