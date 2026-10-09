@@ -1,5 +1,6 @@
 import numpy as np
 from Libs import Lib_SetPos_3D as SetPos_3D
+from Libs import Lib_General as General
 from numba import jit
 
 def Calc_yCen_3D(SPs): 
@@ -86,7 +87,7 @@ def Set_RelaxPars(SPs):
     tauInvBulk  = SPs['tauInvBulk']
     etaabsSph  = SPs['etaabsSph']
     tandelSph  = SPs['tandelSph']
-    Lambda_TRT = SPs['Lambda_TRT']
+    Lambda_TRT = General.Validate_Lambda_TRT(SPs)
     om         = SPs['om']
     rhoSph     = SPs['rhoSph']
     dimensions = SPs['dimensions']
@@ -106,9 +107,7 @@ def Set_RelaxPars(SPs):
                  (1-FracVolSph)*np.log(nuBulk**0.5)) )**2
     rhos = FracVolSph *rhoSph + (1-FracVolSph)
     tauInvs = np.complex128(1./(3.*nus+0.5))
-    if Lambda_TRT != 0 :  
-        tauInvs_Asym = (4.-2.*tauInvs)/(2.-tauInvs+4*Lambda_TRT*tauInvs)
-    else : tauInvs_Asym = tauInvs    
+    tauInvs_Asym = (4.-2.*tauInvs)/(2.-tauInvs+4*Lambda_TRT*tauInvs)
     one_m_tauInvs_m_Iom      = 1 - tauInvs      - 1j*om*rhos + 5./2.*(om*rhos)**2
     one_m_tauInvs_m_Iom_Asym = 1 - tauInvs_Asym - 1j*om*rhos  + 5./2.*(om*rhos)**2
     return FracVolSph,tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos

@@ -8,6 +8,7 @@ from Libs import Lib_OscBnd          as OscBnd
 from Libs import Lib_Handle_Top      as Handle_Top
 from Libs import Lib_FitRI           as FitRI
 from Libs import Lib_StreamCollide   as StrColl
+from Libs import Lib_JAX             as JAX
 from Libs import Lib_IO              as IO
 from Libs import Lib_Plots_from_Main as Plots_from_Main 
 from Libs import Lib_Plots_for_GUI  as Plots_from_GUI
@@ -111,7 +112,21 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
     B = None
     if SPs['ProblemType'] == 'SoftParticles':
         B = Soft.compute_B(nx, ny, nz, int(SPs['nSph']), SPs['RSph'], SphPoss[0], SphPoss[1], SphPoss[2])
-    while not Converged: 
+    jax_stepper = None
+    if SPs.get('ComputeBackend','numba') == 'jax' and not Do_Ref:
+        if dimensions != 3 or not SPs['Do_OscBnd']:
+            raise ValueError('The JAX backend currently supports 3D oscillating boundaries')
+        jax_stepper = JAX.OscBndStepper3D(
+            cxs,cys,czs,wi,ibars,MatricesTop,
+            OutsideLBMDomains,i_BCs,PoiLs,qs,
+            tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,
+            device_name=SPs.get('JAXDevice','auto'),
+            preallocate=SPs.get('JAXPreallocate',False),
+        )
+        SPs['ComputeBackendResolved'] = 'jax'
+        SPs['JAXPlatformResolved'] = jax_stepper.platform
+        SPs['JAXDeviceResolved'] = jax_stepper.device_description
+    while not Converged:
         if Do_Ref : 
             h1,Fx_on_Wall = StrColl.FD_LBM_Step_Ref(h1,ny,nd,cxs,cys,czs,wi,ibars,\
                     i_ups,i_notups,i_downs,i_notdowns,ZBulk,om,\
@@ -120,11 +135,15 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
             AuxPars    = np.ones(6,dtype = complex)*np.nan            
         if not Do_Ref: 
             if SPs['Do_OscBnd']  : 
-                if SPs['dimensions'] == 3: 
-                    h,Fx_on_Wall,FxLs,FyLs,FzLs = \
-                        StrColl.FreqDLBMStep_OscBnd_3D(h,nx,ny,nz,nd,cxs,cys,czs,wi,ibars,MatricesTop,\
-                            nLstot,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs,uzLs,\
-                            tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym)
+                if SPs['dimensions'] == 3:
+                    if jax_stepper is None:
+                        h,Fx_on_Wall,FxLs,FyLs,FzLs = \
+                            StrColl.FreqDLBMStep_OscBnd_3D(h,nx,ny,nz,nd,cxs,cys,czs,wi,ibars,MatricesTop,\
+                                nLstot,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs,uzLs,\
+                                tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym)
+                    else:
+                        h,Fx_on_Wall,FxLs,FyLs,FzLs = \
+                            jax_stepper.step(h,uxLs,uyLs,uzLs)
                     uxLs,uyLs,uzLs,FxCont_tot,OscBndAmps,MotionPars,MotionParTitles,\
                         AuxPars,AuxParTitles = \
                         OscBnd.Update_Motion_3D(nLs,nLstot,iSs,xLs,yLs,zLs,uxLs,uyLs,uzLs,\
@@ -164,6 +183,7 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
             ResponseRaw = FxCyl
         else:
             ResponseRaw = General.Calc_Dfcbyn(SPs,Fx_on_Wall,FxCont_tot,Do_Ref)
+        SPs['ResponseRawLast'] = ResponseRaw
         if step >= len(tbytRI_RIs) - 1: 
             tbytRI_RIs       = np.append(tbytRI_RIs      ,np.ones( 1000 * ny**2                  )*np.nan)
             Response_RIs     = np.append(Response_RIs    ,np.ones( 1000 * ny**2   ,dtype= complex)*np.nan)
@@ -295,7 +315,7 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 AuxPars_RI[   step] = AuxPars
             if SPs['ProblemType'] in ['StiffParticles','Roughness','SFA','CylinderQCM3D']:
                 dr,ux,uy,uz = \
-                    OscBnd.Calc_dr_ux_uy_uz_OscBnd(h,cxs,cys,czs,\
+                    OscBnd.Calc_dr_ux_uy_uz_OscBnd(np.asarray(h),cxs,cys,czs,\
                         OutsideLBMDomains,InParticles,OscBndAmps,SPs)
             if SPs['ProblemType'] == 'FilmResonance': 
                 dr = np.zeros(ny)

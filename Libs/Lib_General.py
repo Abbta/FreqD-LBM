@@ -1,5 +1,16 @@
 import numpy as np
 
+LAMBDA_TRT = 0.25
+
+
+def Validate_Lambda_TRT(SPs):
+    """Require the production TRT magic parameter."""
+    value = SPs.get('Lambda_TRT')
+    if isinstance(value, bool) or not isinstance(value, (int, float, np.number)) \
+            or float(value) != LAMBDA_TRT:
+        raise ValueError('Lambda_TRT must be 0.25')
+    return LAMBDA_TRT
+
 def Calc_Dfcbyn(SPs,Fx_on_Wall,FxCont,Do_Ref):
     Dx_SI = 1e-9*SPs['Dx_nm']; Mass_SI = 1e-24*SPs['Dx_nm']**3
     om_SI = 2.*np.pi*SPs['n']*SPs['f0_SI']; Dt_SI = SPs['om']/om_SI

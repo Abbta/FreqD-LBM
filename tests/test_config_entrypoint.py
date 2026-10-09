@@ -33,6 +33,15 @@ def test_defaults_and_overrides_are_one_case(tmp_path):
         entry.load_config(config_path)
 
 
+def test_only_production_trt_lambda_is_accepted(tmp_path):
+    config_path = tmp_path / "case.json"
+    config_path.write_text(json.dumps({"Lambda_TRT": 0.25}), encoding="utf-8")
+    assert entry.load_config(config_path)["Lambda_TRT"] == 0.25
+    config_path.write_text(json.dumps({"Lambda_TRT": 0.0}), encoding="utf-8")
+    with pytest.raises(ValueError, match="Lambda_TRT must be 0.25"):
+        entry.load_config(config_path)
+
+
 def test_run_calls_single_simulation_once(monkeypatch):
     calls = []
 

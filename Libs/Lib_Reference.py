@@ -17,11 +17,8 @@ def Relaxation_Parameters(SPs):
     """Return exactly the coefficients used by the existing reference ring-in."""
     om = SPs['om']
     tau_inv = 1. / SPs['tauInvBulk']
-    lam = SPs['Lambda_TRT']
-    if lam != 0:
-        tau_inv_asym = (4. - 2. * tau_inv) / (2. - tau_inv + 4 * lam * tau_inv)
-    else:
-        tau_inv_asym = tau_inv
+    lam = General.Validate_Lambda_TRT(SPs)
+    tau_inv_asym = (4. - 2. * tau_inv) / (2. - tau_inv + 4 * lam * tau_inv)
     one_m_tau_inv_m_iom = 1. - tau_inv - 1j * om + 5. / 2. * om**2
     # Preserve the existing reference kernel's asymmetric coefficient.
     one_m_tau_inv_m_iom_asym = one_m_tau_inv_m_iom

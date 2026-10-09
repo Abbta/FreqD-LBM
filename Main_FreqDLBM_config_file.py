@@ -14,6 +14,7 @@ from pathlib import Path
 
 import numpy as np
 from Libs import Lib_IO as IO
+from Libs import Lib_General as General
 from Libs import Lib_OscBnd as OscBnd
 from Libs import Lib_SingleSim as Single_Sim
 
@@ -48,7 +49,10 @@ DEFAULTS = {
     "SigSmoothDfcbynsFac": 1e-2,
     "RingInFitIntervalSteps": 0,
     "ReferenceMethod": "ring_in",
-    "Lambda_TRT": 0.25,
+    "ComputeBackend": "numba",
+    "JAXDevice": "auto",
+    "JAXPreallocate": False,
+    "Lambda_TRT": General.LAMBDA_TRT,
     "Do_UseQuadraticTerm": True,
     "Do_Allow_rhoUneq1": False,
     "Roughn_VertScale_nm": 3.0,
@@ -179,6 +183,17 @@ def _validate_config(config):
         raise ValueError("ReferenceMethod must be 'ring_in' or 'direct'")
     if config["ReferenceMethod"] == "direct" and config["dimensions"] != 3:
         raise ValueError("Direct reference requires a D3Q19 problem")
+    if config["ComputeBackend"] not in ("numba", "jax"):
+        raise ValueError("ComputeBackend must be 'numba' or 'jax'")
+    if config["JAXDevice"] not in ("auto", "cpu", "gpu"):
+        raise ValueError("JAXDevice must be 'auto', 'cpu', or 'gpu'")
+    if not isinstance(config["JAXPreallocate"], bool):
+        raise ValueError("JAXPreallocate must be boolean")
+    if config["ComputeBackend"] == "jax" and (
+        config["dimensions"] != 3 or not config["Do_OscBnd"]
+    ):
+        raise ValueError("The JAX backend currently supports 3D oscillating boundaries")
+    General.Validate_Lambda_TRT(config)
     if isinstance(config["n"], bool) or not isinstance(config["n"], int) or config["n"] < 1:
         raise ValueError("n must be a positive integer")
     for key in ("Dx_nm", "f0_SI", "Zq_SI", "delta0_nm"):
