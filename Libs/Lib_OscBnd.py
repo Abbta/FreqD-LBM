@@ -759,7 +759,7 @@ def Calc_Domains_Cylinder2D(SPs):
     y = np.arange(ny, dtype=np.float64)[None, :]
     dx = (x - x_cyl + nx / 2.0) % nx - nx / 2.0
     dy = (y - y_cyl + ny / 2.0) % ny - ny / 2.0
-    return (dx**2 + dy**2 <= radius**2).astype(np.int64)
+    return (dx**2 + dy**2 <= radius**2).astype(np.uint8)
 
 
 def Calc_qs_xLs_yLs_Cylinder2D(nLstot, xGridLs, yGridLs, iGridLs, SPs):
@@ -799,33 +799,38 @@ def Set_BoundaryPars_Cylinder2D(OutsideLBMDomains, SPs):
     nx = SPs['nx']
     ny = SPs['ny']
     nd, cxs, cys, _, _, _, _, _, _, _ = General.ReadStencil(SPs['dimensions'])
-    i_BCs = np.zeros((nx, ny, nd), dtype=np.int64)
-    PoiLs = np.zeros((nx, ny, nd), dtype=np.int64)
-    surface_links = []
+    # Exact compact integer masks/indices; q and physical arrays stay float64/complex128.
+    i_BCs = np.zeros((nx, ny, nd), dtype=np.int8)
+    PoiLs = np.zeros((nx, ny, nd), dtype=np.int32)
+    fluid = OutsideLBMDomains == 0
+    x_links = []
+    y_links = []
+    i_links = []
+    offset = 0
+    for direction, (cx, cy) in enumerate(zip(cxs, cys)):
+        # np.roll supplies periodic neighbor values at (x-cx,y-cy) and (x+cx,y+cy).
+        neighbor_minus = np.roll(fluid, (int(cx), int(cy)), axis=(0, 1))
+        neighbor_plus = np.roll(fluid, (-int(cx), -int(cy)), axis=(0, 1))
+        surface = fluid & ~neighbor_minus
+        i_BCs[..., direction] = np.where(
+            fluid, np.where(neighbor_minus, 1, np.where(neighbor_plus, 4, 5)), 0
+        )
+        positions = np.flatnonzero(surface.reshape(-1))
+        count = positions.size
+        if count:
+            PoiLs[..., direction].flat[positions] = np.arange(
+                offset, offset + count, dtype=np.int32
+            )
+            x, y = np.unravel_index(positions, (nx, ny))
+            x_links.append(x.astype(np.int32, copy=False))
+            y_links.append(y.astype(np.int32, copy=False))
+            i_links.append(np.full(count, direction, dtype=np.int8))
+            offset += count
 
-    for x in range(nx):
-        for y in range(ny):
-            if OutsideLBMDomains[x, y]:
-                continue
-            for i in range(nd):
-                xmd = (x - cxs[i]) % nx
-                ymd = (y - cys[i]) % ny
-                if not OutsideLBMDomains[xmd, ymd]:
-                    i_BCs[x, y, i] = 1
-                    continue
-                xpd = (x + cxs[i]) % nx
-                ypd = (y + cys[i]) % ny
-                i_BCs[x, y, i] = 4 if not OutsideLBMDomains[xpd, ypd] else 5
-                PoiLs[x, y, i] = len(surface_links)
-                surface_links.append((x, y, i))
-
-    nLstot = len(surface_links)
-    xGridLs = np.fromiter((link[0] for link in surface_links), dtype=np.int64,
-                          count=nLstot)
-    yGridLs = np.fromiter((link[1] for link in surface_links), dtype=np.int64,
-                          count=nLstot)
-    iGridLs = np.fromiter((link[2] for link in surface_links), dtype=np.int64,
-                          count=nLstot)
+    nLstot = offset
+    xGridLs = np.concatenate(x_links) if x_links else np.empty(0, dtype=np.int32)
+    yGridLs = np.concatenate(y_links) if y_links else np.empty(0, dtype=np.int32)
+    iGridLs = np.concatenate(i_links) if i_links else np.empty(0, dtype=np.int8)
     qs, xLs, yLs = Calc_qs_xLs_yLs_Cylinder2D(
         nLstot, xGridLs, yGridLs, iGridLs, SPs
     )
@@ -868,7 +873,7 @@ def Calc_Domains_2D(SPs):
     nx = SPs['nx']   
     ny = SPs['ny']    
     RoughnessFourierComps = SPs['RoughnessFourierComps']
-    OutsideLBMDomains = np.zeros((nx,ny),dtype = np.int64)    
+    OutsideLBMDomains = np.zeros((nx,ny),dtype = np.int64)
     RoughSurface = np.zeros(nx)
     for x in range(nx):
         for y in range(ny):
@@ -907,7 +912,7 @@ def Set_BoundaryPars_2D(OutsideLBMDomains,SPs):
     ny = SPs['ny']    
     nd,cxs,cys,czs,ibars,wi,i_ups,i_notups,i_downs,i_notdowns = General.ReadStencil(SPs['dimensions'])
     i_BCs = np.zeros((nx,ny,nd),dtype = np.int64)
-    PoiLs = np.zeros((nx,ny,nd),dtype = np.int64) 
+    PoiLs = np.zeros((nx,ny,nd),dtype = np.int64)
     nLstot= np.int64(0)
     for x in range(nx):
         for y in range(ny):

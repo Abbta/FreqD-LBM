@@ -14,6 +14,15 @@ from Libs import Lib_Plots_from_Main as Plots_from_Main
 from Libs import Lib_Plots_for_GUI  as Plots_from_GUI
 
 
+def _ensure_history_capacity(array, min_size, fill=np.nan):
+    if min_size <= len(array):
+        return array
+    new_size = max(1024, len(array) * 2, min_size)
+    grown = np.full((new_size, *array.shape[1:]), fill, dtype=array.dtype)
+    grown[:len(array)] = array
+    return grown
+
+
 def Response_Is_Unstable(ResponseRaw, limit=1e7):
     """Detect divergence from the simulated response, not an early fit."""
     return (
@@ -91,12 +100,13 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
     if dimensions == 3: h = np.zeros((nx,ny,nz,nd),dtype = np.complex128)
     h1 = np.zeros((ny,nd),dtype = np.complex128)
 
-    tbytRI_Extrapols = np.ones( 1000 * ny**2                 )*np.nan
-    Response_Extrapols = np.ones( 1000 * ny**2   ,dtype=complex)*np.nan
-    tbytRI_RIs       = np.ones( 1000 * ny**2                 )*np.nan
-    Response_RIs     = np.ones( 1000 * ny**2   ,dtype=complex)*np.nan
-    MotionPars_RI    = np.ones((1000 * ny**2,6),dtype=complex)*np.nan
-    AuxPars_RI       = np.ones((1000 * ny**2,6),dtype=complex)*np.nan
+    tbytRI_Extrapols = np.full(1024, np.nan)
+    Response_Extrapols = np.full(1024, np.nan + 1j*np.nan, dtype=complex)
+    tbytRI_RIs = np.full(1024, np.nan)
+    Response_RIs = np.full(1024, np.nan + 1j*np.nan, dtype=complex)
+    motion_history_size = 1 if is_cylinder2d else 1024
+    MotionPars_RI = np.full((motion_history_size, 6), np.nan + 1j*np.nan, dtype=complex)
+    AuxPars_RI = np.full((motion_history_size, 6), np.nan + 1j*np.nan, dtype=complex)
     MotionParTitles = ['','','','','','']
     AuxParTitles    = ['','','','','','']
 
@@ -114,19 +124,41 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
         B = Soft.compute_B(nx, ny, nz, int(SPs['nSph']), SPs['RSph'], SphPoss[0], SphPoss[1], SphPoss[2])
     jax_stepper = None
     if SPs.get('ComputeBackend','numba') == 'jax' and not Do_Ref:
-        if dimensions != 3 or not SPs['Do_OscBnd']:
-            raise ValueError('The JAX backend currently supports 3D oscillating boundaries')
-        jax_stepper = JAX.OscBndStepper3D(
-            cxs,cys,czs,wi,ibars,MatricesTop,
-            OutsideLBMDomains,i_BCs,PoiLs,qs,
-            tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,
-            device_name=SPs.get('JAXDevice','auto'),
-            preallocate=SPs.get('JAXPreallocate',False),
-        )
+        if not SPs['Do_OscBnd']:
+            raise ValueError('The JAX backend requires oscillating boundaries')
+        if is_cylinder2d:
+            jax_stepper = JAX.OscBndStepperCylinder2D(
+                cxs,cys,wi,ibars,OutsideLBMDomains,i_BCs,PoiLs,qs,
+                tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,
+                one_m_tauInvs_m_Iom_Asym,
+                device_name=SPs.get('JAXDevice','auto'),
+                preallocate=SPs.get('JAXPreallocate',False),
+            )
+        elif dimensions == 3:
+            jax_stepper = JAX.OscBndStepper3D(
+                cxs,cys,czs,wi,ibars,MatricesTop,
+                OutsideLBMDomains,i_BCs,PoiLs,qs,
+                tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,
+                device_name=SPs.get('JAXDevice','auto'),
+                preallocate=SPs.get('JAXPreallocate',False),
+            )
+        else:
+            raise ValueError('The JAX backend does not support this problem type')
         SPs['ComputeBackendResolved'] = 'jax'
         SPs['JAXPlatformResolved'] = jax_stepper.platform
         SPs['JAXDeviceResolved'] = jax_stepper.device_description
+    jax_batch_fxl = jax_batch_fyl = None
+    jax_batch_cursor = 0
+    jax_batch_size = max(1, int(SPs.get('JAXBatchSteps', 1)))
     while not Converged:
+        if is_cylinder2d and jax_stepper is not None:
+            if jax_batch_fxl is None or jax_batch_cursor >= len(jax_batch_fxl):
+                next_check = ((step // PrintInterval) + 1) * PrintInterval
+                batch_count = min(jax_batch_size, next_check - step + 1)
+                h, jax_batch_fxl, jax_batch_fyl = jax_stepper.step_batch(
+                    h, uxLs, uyLs, batch_count
+                )
+                jax_batch_cursor = 0
         if Do_Ref : 
             h1,Fx_on_Wall = StrColl.FD_LBM_Step_Ref(h1,ny,nd,cxs,cys,czs,wi,ibars,\
                     i_ups,i_notups,i_downs,i_notdowns,ZBulk,om,\
@@ -152,10 +184,15 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                             UpdateMotionFac,OscBndLocked,OscBndLockedTo,iSiL_Lists,n,SPs)
                 if SPs['dimensions'] == 2:
                     if is_cylinder2d:
-                        h,FxLs,FyLs = \
-                            StrColl.FreqDLBMStep_OscBnd_Cylinder2D(h,nx,ny,nd,cxs,cys,wi,ibars,\
-                                nLstot,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs,\
-                                tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym)
+                        if jax_stepper is not None:
+                            FxLs = jax_batch_fxl[jax_batch_cursor]
+                            FyLs = jax_batch_fyl[jax_batch_cursor]
+                            jax_batch_cursor += 1
+                        else:
+                            h,FxLs,FyLs = \
+                                StrColl.FreqDLBMStep_OscBnd_Cylinder2D(h,nx,ny,nd,cxs,cys,wi,ibars,\
+                                    nLstot,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs,\
+                                    tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym)
                         uxLs,uyLs,FxCyl,FzCyl,MotionPars,MotionParTitles,AuxPars,AuxParTitles = \
                             OscBnd.Update_Motion_Cylinder2D(nLstot,FxLs,FyLs,uxLs,uyLs)
                         Fx_on_Wall = np.zeros(nx,dtype=np.complex128)
@@ -184,24 +221,33 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
         else:
             ResponseRaw = General.Calc_Dfcbyn(SPs,Fx_on_Wall,FxCont_tot,Do_Ref)
         SPs['ResponseRawLast'] = ResponseRaw
-        if step >= len(tbytRI_RIs) - 1: 
-            tbytRI_RIs       = np.append(tbytRI_RIs      ,np.ones( 1000 * ny**2                  )*np.nan)
-            Response_RIs     = np.append(Response_RIs    ,np.ones( 1000 * ny**2   ,dtype= complex)*np.nan)
-            tbytRI_Extrapols = np.append(tbytRI_Extrapols,np.ones( 1000 * ny**2                  )*np.nan)
-            Response_Extrapols = np.append(Response_Extrapols,np.ones(1000 * ny**2,dtype=complex)*np.nan)
-            MotionPars_RI    = np.append(MotionPars_RI   ,np.ones((1000 * ny**2,6),dtype= complex)*np.nan)
-            AuxPars_RI       = np.append(AuxPars_RI      ,np.ones((1000 * ny**2,6),dtype= complex)*np.nan)
+        if step >= len(tbytRI_RIs):
+            tbytRI_RIs = _ensure_history_capacity(tbytRI_RIs, step + 1)
+            Response_RIs = _ensure_history_capacity(Response_RIs, step + 1)
+            if not is_cylinder2d:
+                MotionPars_RI = _ensure_history_capacity(MotionPars_RI, step + 1)
+                AuxPars_RI = _ensure_history_capacity(AuxPars_RI, step + 1)
 
         tbytRI_RIs[step] = float(step)/ny**2
         if Do_Ref or is_cylinder2d : Response_RIs[step] = ResponseRaw
         else                       : Response_RIs[step] = ResponseRaw - SPs['Dfcbyn_Ref']
+
+        if Response_Is_Unstable(ResponseRaw):
+            print(Describe_RingIn_Stop(
+                ResponseRaw, step, ny, SPs['MaxtbytRI'], Do_Ref,
+                Response_Extrapol[countFits] if countFits else np.nan,
+                countFits, np.nan, np.nan,
+            ), flush=True)
+            SPs['RingInFailureReason'] = 'raw_response_unstable'
+            SPs['ProblemFlag'] = 1
+            break
         
         # with open(SPs['folder']+'\\errors1.txt', "a") as f:
         #     print('step               : ', step, file=f) 
         #     print('MotionPars         : ', MotionPars, file=f) 
         #     print('MotionPars_RI[step]: ', MotionPars_RI[step], file=f)             
 
-        MotionPars_RI[step] = MotionPars 
+        MotionPars_RI[0 if is_cylinder2d else step] = MotionPars
      
         if step%FitInterval == 0 and step >= max(FitInterval,2):
             if SPs['SigSmoothDfcbynsFac'] > 0 and step > 2*ny**2: 
@@ -209,7 +255,7 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 i_ini =      int(np.max([10*sig,step/3.]))
                 i_fin = step-int(10*sig)
                 tbytRI_RIs4Fit = tbytRI_RIs[i_ini:i_fin]
-                Response_RIs4Fit = gaussian_filter(Response_RIs,sigma=sig)
+                Response_RIs4Fit = gaussian_filter(Response_RIs[:step + 1],sigma=sig)
                 Response_RIs4Fit = Response_RIs4Fit[i_ini:i_fin]
             else : 
                 i_ini = int(step/3.)
@@ -224,6 +270,8 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 om_complex      = np.nan
                 Response_RI_Fit = np.nan
             countFits += 1    
+            tbytRI_Extrapols = _ensure_history_capacity(tbytRI_Extrapols, countFits + 1)
+            Response_Extrapols = _ensure_history_capacity(Response_Extrapols, countFits + 1)
             tbytRI_Extrapols[countFits] = step/ny**2
             Response_Extrapols[countFits] = Response_Extrapol
             
@@ -282,8 +330,10 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 break
         step += 1    
         
-    if Converged : 
-        if Do_Ref :         
+    if Converged :
+        if is_cylinder2d and jax_stepper is not None:
+            h = np.asarray(h)
+        if Do_Ref :
             SPs['Dfcbyn_Ref'] = Response_Extrapol
             SPs['StdErr_Ref'] = StdErr_Extrapol
             SPs['Dfratio_Ref'] = Response_Extrapol.imag/(-Response_Extrapol.real)
@@ -297,6 +347,19 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 ux = np.sum(h*cxs,axis=2,dtype=np.complex128)
                 uy = np.sum(h*cys,axis=2,dtype=np.complex128)
                 uz = np.zeros((nx,ny),dtype=np.complex128)
+                if SPs.get('SaveCylinder2DFields', False):
+                    x_nm = (np.arange(nx) - (nx - 1) / 2.0) * SPs['Dx_nm']
+                    z_nm = (np.arange(ny) - (ny - 1) / 2.0) * SPs['Dx_nm']
+                    np.savez_compressed(
+                        SPs['folder'] + '/cylinder2d-fields.npz',
+                        x_nm=x_nm,
+                        z_nm=z_nm,
+                        ux_lbm_complex=ux,
+                        uz_lbm_complex=uy,
+                        delta_rho_lbm_complex=dr,
+                        solid_mask=OutsideLBMDomains.astype(bool),
+                        field_convention=np.asarray('exp(+i omega t); code y is physical z'),
+                    )
                 SPs['CylinderForcePerLengthZOnCylinderByLiquid_LBM_Last'] = FzCyl
                 if SPs['CylUx_LBM'] != 0:
                     # Resistance opposes the imposed cylinder velocity.
@@ -312,7 +375,7 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                     Soft.Calc_MotionPars_3D_UU(B,nx,ny,nz,nd,cxs,cys,czs,i_ups,i_notups,ibars,wi,h,\
                                      tauInvs,FracVolSph,SPs,SphPoss)
                 MotionPars_RI[step] = MotionPars
-                AuxPars_RI[   step] = AuxPars
+                AuxPars_RI[step] = AuxPars
             if SPs['ProblemType'] in ['StiffParticles','Roughness','SFA','CylinderQCM3D']:
                 dr,ux,uy,uz = \
                     OscBnd.Calc_dr_ux_uy_uz_OscBnd(np.asarray(h),cxs,cys,czs,\
@@ -347,9 +410,10 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
             if SPs['ProblemType'] == 'FilmResonance' :
                 pass #Plots.Plot_DisplacementField_1D(h,SPs)
 
+            output_index = 0 if is_cylinder2d else step - 1
             MotionParsDict,AuxDict = IO.Make_MotionParsDict_AusParsDict(\
-                MotionPars_RI[step-1],MotionParTitles,\
-                AuxPars_RI[   step-1],AuxParTitles)
+                MotionPars_RI[output_index],MotionParTitles,\
+                AuxPars_RI[output_index],AuxParTitles)
             ResultLabel = 'CylinderForcePerLengthXOnCylinderByLiquid_LBM' if is_cylinder2d else 'Dfcbyn'
             print(SPs['iavg'],SPs['iPar1'],SPs['iPar2'],SPs['iPar3'],SPs['iovt'],\
                 ResultLabel,np.round(Response_Extrapol,3),'CompTimeMins',SPs['CompTimeMins'])

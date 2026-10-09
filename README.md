@@ -33,10 +33,12 @@ assumes `nx == nz`.
 CPU kernels use Numba's on-disk cache. Cylinder masks and final field diagnostics
 are precomputed/vectorized; the single-case solver remains serial.
 All production paths require TRT with `Lambda_TRT=0.25`; conflicting configs fail.
-Set `ComputeBackend="jax"` to run the existing 3D oscillating-boundary step with
-JAX on `JAXDevice="auto"`, `"cpu"`, or `"gpu"`. Double precision is mandatory.
-The default remains `"numba"`; JAX does not change geometry, TRT collision,
-interpolated boundaries, Fourier top condition, convergence, or output handling.
+Set `ComputeBackend="jax"` to run `Cylinder2D` (D2Q9) or the 3D
+oscillating-boundary step (D3Q19) with JAX on `JAXDevice="auto"`, `"cpu"`, or
+`"gpu"`. Double precision is mandatory. The default remains `"numba"`; JAX
+does not change geometry, TRT collision, interpolated cylinder boundaries,
+convergence, or output handling. The 2D cylinder JAX step preserves its periodic
+in-plane boundaries and does not use the 3D Fourier-top operator.
 Install the CPU validation dependency with `requirements-jax-cpu.txt`. On Pelle,
 install the JAX GPU wheel matching the loaded CUDA version before selecting `"gpu"`;
 the solver fails instead of silently falling back when no GPU is available.

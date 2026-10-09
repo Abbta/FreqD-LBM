@@ -40,6 +40,7 @@ DEFAULTS = {
     "MaxwellRelaxRate_MHz": 1.0,
     "UpdateMotionFac": 0.02,
     "Do_SavePlots": False,
+    "SaveCylinder2DFields": False,
     "Do_Plot_MotionPars": True,
     "Do_Plot_RingIns": True,
     "PrintIntervalFac": 1.0,
@@ -52,6 +53,7 @@ DEFAULTS = {
     "ComputeBackend": "numba",
     "JAXDevice": "auto",
     "JAXPreallocate": False,
+    "JAXBatchSteps": 1,
     "Lambda_TRT": General.LAMBDA_TRT,
     "Do_UseQuadraticTerm": True,
     "Do_Allow_rhoUneq1": False,
@@ -189,10 +191,21 @@ def _validate_config(config):
         raise ValueError("JAXDevice must be 'auto', 'cpu', or 'gpu'")
     if not isinstance(config["JAXPreallocate"], bool):
         raise ValueError("JAXPreallocate must be boolean")
-    if config["ComputeBackend"] == "jax" and (
-        config["dimensions"] != 3 or not config["Do_OscBnd"]
+    if not isinstance(config["SaveCylinder2DFields"], bool):
+        raise ValueError("SaveCylinder2DFields must be boolean")
+    batch_steps = config["JAXBatchSteps"]
+    if isinstance(batch_steps, bool) or not isinstance(batch_steps, int) or batch_steps < 1:
+        raise ValueError("JAXBatchSteps must be a positive integer")
+    if config["ComputeBackend"] == "jax" and not (
+        config["Do_OscBnd"]
+        and (
+            config["dimensions"] == 3
+            or config["ProblemType"] == "Cylinder2D"
+        )
     ):
-        raise ValueError("The JAX backend currently supports 3D oscillating boundaries")
+        raise ValueError(
+            "The JAX backend supports 3D oscillating boundaries and Cylinder2D"
+        )
     General.Validate_Lambda_TRT(config)
     if isinstance(config["n"], bool) or not isinstance(config["n"], int) or config["n"] < 1:
         raise ValueError("n must be a positive integer")
