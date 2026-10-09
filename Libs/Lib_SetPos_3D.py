@@ -1,7 +1,7 @@
 import numpy as np
 from numba import jit
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def DisLTDMin3D(nx,ny,nz,x1,x2,y1,y2,z1,z2,DMin):
     r1 = ((x1-x2   )**2+(y1-y2)**2+(z1-z2   )**2)**0.5
     r2 = ((x1-x2-nx)**2+(y1-y2)**2+(z1-z2   )**2)**0.5
@@ -18,7 +18,7 @@ def DisLTDMin3D(nx,ny,nz,x1,x2,y1,y2,z1,z2,DMin):
     else: lessthanDMin = False
     return lessthanDMin
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def DisLTDMin_inPlane(nx,nz,x1,x2,z1,z2,DMin):
     r1 = ((x1-x2   )**2+(z1-z2   )**2)**0.5
     r2 = ((x1-x2-nx)**2+(z1-z2   )**2)**0.5
@@ -35,7 +35,7 @@ def DisLTDMin_inPlane(nx,nz,x1,x2,z1,z2,DMin):
     else: lessthanDMin = False
     return lessthanDMin
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def Check_for_Overlap(nx,nz,xSphs,zSphs,RSph,nSph,Gap_P2P):
     Overlap = False
     for i in range(nSph):
@@ -95,7 +95,7 @@ def Set_CylPoss(SPs):
     z_cyl = (nz-1)/2.
     return np.array([[x_cyl],[y_cyl],[z_cyl]],dtype=np.float64)
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def DisLTDMin_CylinderQCM3D(nx,nz,x1,x2,y,z1,z2,DMin,height):
     dx = abs(x1-x2)
     dx = min(dx,nx-dx)

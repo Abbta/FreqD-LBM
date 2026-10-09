@@ -30,6 +30,8 @@ interpolated-boundary, reference-subtraction, and ring-in paths are reused.
 `RCyl_nm`, `HCyl_nm`, `CylBoxWidth_nm`, and `CylBoxHeight_nm` define the geometry.
 The lateral periods are equal because the existing Fourier-top implementation
 assumes `nx == nz`.
+CPU kernels use Numba's on-disk cache. Cylinder masks and final field diagnostics
+are precomputed/vectorized; the single-case solver remains serial.
 `RingInFitIntervalSteps=0` retains the normal size-derived fitting cadence;
 positive values explicitly set the cadence for bounded runtime experiments.
 If ring-in stops, stdout reports whether the raw response was unstable, the time

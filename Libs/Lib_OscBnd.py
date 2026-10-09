@@ -16,6 +16,14 @@ def Calc_Domains_3D(SPs):
     xSphs = SphPoss[0]
     ySphs = SphPoss[1]
     zSphs = SphPoss[2]
+    if SPs['ProblemType'] == 'CylinderQCM3D':
+        if nSph != 1:
+            raise ValueError('CylinderQCM3D currently supports one periodic cylinder')
+        cylinder = Calc_Domains_CylinderQCM3D(
+            nx,ny,nz,xSphs[0],zSphs[0],RSph,SPs['HCyl'])
+        OutsideLBMDomains[:] = cylinder
+        InParticles[:,:,:,0] = cylinder
+        return OutsideLBMDomains,InParticles
     for x in range(nx):
         for y in range(ny):
             for z in range(nz):
@@ -31,6 +39,17 @@ def Calc_Domains_3D(SPs):
                         OutsideLBMDomains[x,y,z]    = 1
                         InParticles[      x,y,z,iS] = 1
     return OutsideLBMDomains,InParticles
+
+def Calc_Domains_CylinderQCM3D(nx,ny,nz,xCyl,zCyl,radius,height):
+    """Precompute the finite upright-cylinder mask on the periodic x-z grid."""
+    x = np.arange(nx,dtype=np.float64)[:,None]
+    y = np.arange(ny,dtype=np.float64)[None,:,None]
+    z = np.arange(nz,dtype=np.float64)[None,:]
+    dx = np.minimum(np.abs(x-xCyl),nx-np.abs(x-xCyl))
+    dz = np.minimum(np.abs(z-zCyl),nz-np.abs(z-zCyl))
+    radial = (dx**2 + dz**2)[:,None,:] <= radius**2
+    vertical = (0. <= y) & (y <= height)
+    return (radial & vertical).astype(np.int64)
 
 def Calc_qs_xLs_yLs_zLs_3D(nLstot,iSs,xGridLs,yGridLs,zGridLs,iGridLs,SphPoss,RSph,SPs): 
     nd,cxs,cys,czs,ibars,wi,i_ups,i_notups,i_downs,i_notdowns = General.ReadStencil(SPs['dimensions'])
@@ -702,29 +721,33 @@ def Calc_dr_ux_uy_uz_OscBnd(h,cxs,cys,czs,OutsideLBMDomains,InParticles,OscBndAm
     nx = SPs['nx']
     ny = SPs['ny']
     nz = SPs['nz']
-    dr = np.zeros((nx,ny,nz),dtype = np.complex128)
-    ux = np.zeros((nx,ny,nz),dtype = np.complex128)
-    uy = np.zeros((nx,ny,nz),dtype = np.complex128)
-    uz = np.zeros((nx,ny,nz),dtype = np.complex128)
-    for x in range(nx):
-        for y in range(ny):
-            for z in range(nz):
-                if not OutsideLBMDomains[x,y,z]: 
-                    dr[x,y,z] = np.sum(h[x,y,z])
-                    ux[x,y,z] = np.sum(h[x,y,z]*cxs)
-                    uy[x,y,z] = np.sum(h[x,y,z]*cys)
-                    uz[x,y,z] = np.sum(h[x,y,z]*czs)
-                else: 
-                    if SPs['ProblemType'] in ['StiffParticles','CylinderQCM3D']:
-                        dr[x,y,z],ux[x,y,z],uy[x,y,z],uz[x,y,z] = \
-                            Calc_dr_ux_uy_uz_Rigid_StiffParticle(x,y,z,\
-                                InParticles,OscBndAmps,SPs)
-                    if SPs['ProblemType'] == 'Roughness':
-                        dr[x,y,z] = uy[x,y,z] = uz[x,y,z] = 0
-                        ux[x,y,z] = 1
-                    if SPs['ProblemType'] == 'SFA':
-                        dr[x,y,z] = ux[x,y,z] = uy[x,y,z] = uz[x,y,z] = 0
-    return dr,ux,uy,uz                
+    fluid = OutsideLBMDomains == 0
+    dr = np.where(fluid,np.sum(h,axis=3),0.+0.j)
+    ux = np.where(fluid,np.einsum('xyzi,i->xyz',h,cxs),0.+0.j)
+    uy = np.where(fluid,np.einsum('xyzi,i->xyz',h,cys),0.+0.j)
+    uz = np.where(fluid,np.einsum('xyzi,i->xyz',h,czs),0.+0.j)
+    if SPs['ProblemType'] in ['StiffParticles','CylinderQCM3D']:
+        x = np.arange(nx,dtype=np.float64)[:,None,None]
+        y = np.arange(ny,dtype=np.float64)[None,:,None]
+        z = np.arange(nz,dtype=np.float64)[None,None,:]
+        SphPoss = SPs['SphPoss']
+        for iS in range(int(SPs['nSph'])):
+            inside = InParticles[:,:,:,iS] != 0
+            rigid_ux = (OscBndAmps[0,iS]
+                + OscBndAmps[4,iS]*(z-SphPoss[2,iS])
+                - OscBndAmps[5,iS]*(y-SphPoss[1,iS]))
+            rigid_uy = (OscBndAmps[1,iS]
+                + OscBndAmps[5,iS]*(x-SphPoss[0,iS])
+                - OscBndAmps[3,iS]*(z-SphPoss[2,iS]))
+            rigid_uz = (OscBndAmps[2,iS]
+                + OscBndAmps[3,iS]*(y-SphPoss[1,iS])
+                - OscBndAmps[4,iS]*(x-SphPoss[0,iS]))
+            ux[inside] = np.broadcast_to(rigid_ux,(nx,ny,nz))[inside]
+            uy[inside] = np.broadcast_to(rigid_uy,(nx,ny,nz))[inside]
+            uz[inside] = np.broadcast_to(rigid_uz,(nx,ny,nz))[inside]
+    elif SPs['ProblemType'] == 'Roughness':
+        ux[~fluid] = 1
+    return dr,ux,uy,uz
 
 def Calc_Domains_Cylinder2D(SPs):
     nx = SPs['nx']

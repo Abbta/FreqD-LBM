@@ -1,7 +1,7 @@
 import numpy as np
 from numba import jit
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def Relax_3D(hl,cxs,cys,czs,wi,ibars,
              tauInvl,tauInvl_Asym,one_m_tauInvl_m_Iom,one_m_tauInvl_m_Iom_Asym):
     ilist = [0,1,3,5,7,9,11,13,15,17]
@@ -24,7 +24,7 @@ def Relax_3D(hl,cxs,cys,czs,wi,ibars,
     return hl
 
 ### simpler, never called
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def Relax_3D_BGK(hl,cxs,cys,czs,wi,tauInvl,one_m_tauInvl_m_Iom):
     drl = np.sum(hl    )
     uxl = np.sum(hl*cxs)
@@ -35,7 +35,7 @@ def Relax_3D_BGK(hl,cxs,cys,czs,wi,tauInvl,one_m_tauInvl_m_Iom):
     hl = one_m_tauInvl_m_Iom * hl + tauInvl * heq
     return hl
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def Relax_2D(hl,cxs,cys,wi,ibars,
              tauInvl,tauInvl_Asym,one_m_tauInvl_m_Iom,one_m_tauInvl_m_Iom_Asym):
     ilist = [0,1,2,5,6]
@@ -57,7 +57,7 @@ def Relax_2D(hl,cxs,cys,wi,ibars,
     return hl
 
 ### simpler, never called
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def Relax_2D_BGK(hl,cxs,cys,wi,tauInvl,one_m_tauInvl_m_Iom):
     drl = np.sum(hl    )
     uxl = np.sum(hl*cxs)

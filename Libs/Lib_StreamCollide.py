@@ -3,7 +3,7 @@ from numba import jit
 from Libs import Lib_Handle_Top as Handle_Top
 from Libs import Lib_Relax      as Relax
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def FreqDLBMStep_SoftPt_3D(h,nx,ny,nz,\
         nd,cxs,cys,czs,wi,ibars,i_ups,i_notups,i_downs,i_notdowns,MatricesTop,\
         tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym):
@@ -48,7 +48,7 @@ def FreqDLBMStep_SoftPt_3D(h,nx,ny,nz,\
                 one_m_tauInvs_m_Iom[x,y,z],one_m_tauInvs_m_Iom_Asym[x,y,z])
     return h,Fx_on_Wall
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def FreqDLBMStep_OscBnd_3D(h,nx,ny,nz,nd,cxs,cys,czs,wi,ibars,MatricesTop,\
         nLstot,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs,uzLs,\
         tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym):
@@ -121,7 +121,7 @@ def FreqDLBMStep_OscBnd_3D(h,nx,ny,nz,nd,cxs,cys,czs,wi,ibars,MatricesTop,\
                     one_m_tauInvs_m_Iom[x,y,z],one_m_tauInvs_m_Iom_Asym[x,y,z])
     return h,Fx_on_Wall,FxLs,FyLs,FzLs
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def FreqDLBMStep_SoftPt_2D(h,nx,ny,\
         nd,cxs,cys,czs,wi,ibars,i_ups,i_notups,i_downs,i_notdowns,MatricesTop,\
         tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym):
@@ -160,7 +160,7 @@ def FreqDLBMStep_SoftPt_2D(h,nx,ny,\
             one_m_tauInvs_m_Iom[x,y],one_m_tauInvs_m_Iom_Asym[x,y])
     return h,Fx_on_Wall
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def FreqDLBMStep_OscBnd_2D(h,nx,ny,nd,cxs,cys,czs,wi,ibars,MatricesTop,\
         nLstot,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs,uzLs,\
         tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym):
@@ -223,7 +223,7 @@ def FreqDLBMStep_OscBnd_2D(h,nx,ny,nd,cxs,cys,czs,wi,ibars,MatricesTop,\
                 one_m_tauInvs_m_Iom[x,y],one_m_tauInvs_m_Iom_Asym[x,y])
     return h,Fx_on_Wall,FxLs,FyLs
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def FreqDLBMStep_OscBnd_Cylinder2D(h,nx,ny,nd,cxs,cys,wi,ibars,\
         nLstot,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs,\
         tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym):
@@ -274,7 +274,7 @@ def FreqDLBMStep_OscBnd_Cylinder2D(h,nx,ny,nd,cxs,cys,wi,ibars,\
                 one_m_tauInvs_m_Iom[x,y],one_m_tauInvs_m_Iom_Asym[x,y])
     return h,FxLs,FyLs
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def FreqDLBMStep_1D(h,ny,\
         nd,cxs,cys,wi,ibars,i_ups,i_notups,i_downs,i_notdowns,\
         tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,om):
@@ -326,7 +326,7 @@ def FreqDLBMStep_1D(h,ny,\
 #                 tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym)
 #     return h,Fx_on_Wall,FxLs,FyLs,FzLs            
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def FD_LBM_Step_Ref(h,ny,nd,cxs,cys,czs,wi,ibars,\
         i_ups,i_notups,i_downs,i_notdowns,ZBulk,om,\
         tauInv_Ref,tauInv_Asym_Ref,one_m_tauInv_m_Iom_Ref,one_m_tauInv_m_Iom_Asym_Ref):

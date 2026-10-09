@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 
 import Main_FreqDLBM_config_file as entry  # noqa: E402
 from Libs import Lib_Plots_from_Main as plots  # noqa: E402
+from Libs import Lib_SetPos_3D as setpos  # noqa: E402
 
 
 def test_defaults_and_overrides_are_one_case(tmp_path):
@@ -113,6 +114,64 @@ def test_cylinder_qcm_3d_reuses_periodic_particle_boundary_path(tmp_path, monkey
         sps["OscBndPars"]["OscBndAmps"], sps,
     )
     assert np.all(fields[1][domains.astype(bool)] == 1)
+
+
+def test_vectorized_cylinder_mask_matches_scalar_definition():
+    nx, ny, nz = 9, 7, 11
+    x_cyl, z_cyl, radius, height = 4.25, 5.0, 2.75, 4.5
+    actual = entry.OscBnd.Calc_Domains_CylinderQCM3D(
+        nx, ny, nz, x_cyl, z_cyl, radius, height
+    )
+    expected = np.zeros((nx, ny, nz), dtype=np.int64)
+    for x in range(nx):
+        for y in range(ny):
+            for z in range(nz):
+                expected[x, y, z] = setpos.DisLTDMin_CylinderQCM3D(
+                    nx, nz, x, x_cyl, y, z, z_cyl, radius, height
+                )
+    np.testing.assert_array_equal(actual, expected)
+
+
+def test_vectorized_cylinder_diagnostics_match_scalar_definition():
+    rng = np.random.default_rng(7)
+    nx, ny, nz = 7, 6, 5
+    stencil = entry.OscBnd.General.ReadStencil(3)
+    h = rng.normal(size=(nx, ny, nz, stencil[0])) + 1j * rng.normal(
+        size=(nx, ny, nz, stencil[0])
+    )
+    sps = {
+        "nx": nx,
+        "ny": ny,
+        "nz": nz,
+        "nSph": 1,
+        "ProblemType": "CylinderQCM3D",
+        "SphPoss": np.array([[3.0], [1.5], [2.0]]),
+    }
+    outside = entry.OscBnd.Calc_Domains_CylinderQCM3D(nx, ny, nz, 3, 2, 1.5, 3)
+    particles = outside[:, :, :, None]
+    amplitudes = rng.normal(size=(6, 1)) + 1j * rng.normal(size=(6, 1))
+    actual = entry.OscBnd.Calc_dr_ux_uy_uz_OscBnd(
+        h, stencil[1], stencil[2], stencil[3], outside, particles, amplitudes, sps
+    )
+    expected = [np.zeros((nx, ny, nz), dtype=complex) for _ in range(4)]
+    for x in range(nx):
+        for y in range(ny):
+            for z in range(nz):
+                if outside[x, y, z]:
+                    values = entry.OscBnd.Calc_dr_ux_uy_uz_Rigid_StiffParticle(
+                        x, y, z, particles, amplitudes, sps
+                    )
+                else:
+                    values = (
+                        np.sum(h[x, y, z]),
+                        np.sum(h[x, y, z] * stencil[1]),
+                        np.sum(h[x, y, z] * stencil[2]),
+                        np.sum(h[x, y, z] * stencil[3]),
+                    )
+                for field, value in zip(expected, values, strict=True):
+                    field[x, y, z] = value
+    for field, reference in zip(actual, expected, strict=True):
+        np.testing.assert_allclose(field, reference, rtol=0, atol=1e-14)
 
 
 def test_locked_qcm_cylinder_transmits_hydrodynamic_force_to_qcm():

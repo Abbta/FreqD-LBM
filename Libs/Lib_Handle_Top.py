@@ -42,7 +42,7 @@ def Calc_MatricesTop_3D(nx,nz,nu,om):
             MatricesTop[jx,jz] = np.dot(R_inv,np.dot(Fq,R))
     return MatricesTop 
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def Calc_uT_Fourier_3D(h,nx,nz,MatricesTop):
     uxT = np.zeros((nx,nz),dtype = np.complex128)
     uyT = np.zeros((nx,nz),dtype = np.complex128)
@@ -73,7 +73,7 @@ def Calc_uT_Fourier_3D(h,nx,nz,MatricesTop):
                     uzT[x,z] += uq_vec[2] * np.exp(1j*qx*x)*np.exp(1j*qz*z)
     return uxT,uyT,uzT
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def Calc_uT_Local_3D(h,nx,nz,om,tauInvs):  # for comppleteness, never called
     uxT = np.zeros((nx,nz),dtype = np.complex128)
     uyT = np.zeros((nx,nz),dtype = np.complex128)
@@ -120,7 +120,7 @@ def Calc_MatricesTop_2D(nx,nu,om):
         MatricesTop[jx] = Fq
     return MatricesTop 
 
-@jit(nopython = True)
+@jit(nopython = True, cache = True)
 def Calc_uT_Fourier_2D(h,nx,MatricesTop):
     uxT = np.zeros((nx),dtype = np.complex128)
     uyT = np.zeros((nx),dtype = np.complex128)
