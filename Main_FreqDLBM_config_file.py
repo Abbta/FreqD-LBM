@@ -54,7 +54,7 @@ DEFAULTS = {
     "JAXDevice": "auto",
     "JAXPreallocate": False,
     "JAXBatchSteps": 1,
-    "Lambda_TRT": General.LAMBDA_TRT,
+    "Lambda_TRT": 0.25,
     "Do_UseQuadraticTerm": True,
     "Do_Allow_rhoUneq1": False,
     "Roughn_VertScale_nm": 3.0,
