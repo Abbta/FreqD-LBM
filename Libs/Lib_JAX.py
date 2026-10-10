@@ -19,7 +19,10 @@ def _jax_runtime(device_name, preallocate):
             "ComputeBackend='jax' requires the optional JAX dependency"
         ) from error
     jax.config.update("jax_enable_x64", True)
-    devices = jax.devices() if device_name == "auto" else jax.devices(device_name)
+    # JAX's generic "gpu" platform alias may initialize both CUDA and ROCm.
+    # Pelle uses NVIDIA GPUs, so select CUDA explicitly.
+    platform_name = "cuda" if device_name == "gpu" else device_name
+    devices = jax.devices() if platform_name == "auto" else jax.devices(platform_name)
     if not devices:
         raise RuntimeError(f"No JAX {device_name!r} device is available")
     return jax, jnp, devices[0]
