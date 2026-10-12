@@ -49,6 +49,7 @@ DEFAULTS = {
     "MaxtbytRI": 100.0,
     "SigSmoothDfcbynsFac": 1e-2,
     "RingInFitIntervalSteps": 0,
+    "MaxRingInSteps": 0,
     "RingInResponseLimitFactor": 1e4,
     "SaveRingInHistory": False,
     "ReferenceMethod": "ring_in",
@@ -219,6 +220,13 @@ def _validate_config(config):
     fit_interval = config["RingInFitIntervalSteps"]
     if isinstance(fit_interval, bool) or not isinstance(fit_interval, int) or fit_interval < 0:
         raise ValueError("RingInFitIntervalSteps must be a nonnegative integer")
+    max_ring_in_steps = config["MaxRingInSteps"]
+    if (
+        isinstance(max_ring_in_steps, bool)
+        or not isinstance(max_ring_in_steps, int)
+        or max_ring_in_steps < 0
+    ):
+        raise ValueError("MaxRingInSteps must be a nonnegative integer")
     response_limit_factor = config["RingInResponseLimitFactor"]
     if (
         not isinstance(response_limit_factor, (int, float))

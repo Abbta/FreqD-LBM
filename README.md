@@ -44,6 +44,8 @@ install the JAX GPU wheel matching the loaded CUDA version before selecting `"gp
 the solver fails instead of silently falling back when no GPU is available.
 `RingInFitIntervalSteps=0` retains the normal size-derived fitting cadence;
 positive values explicitly set the cadence for bounded runtime experiments.
+`MaxRingInSteps=0` disables the step cap; a positive value stops after recording
+that many steps, primarily for matched backend diagnostics.
 If ring-in stops, stdout reports whether the raw response was unstable, the time
 limit was exceeded, or both, together with the raw response and fit drift.
 `RingInResponseLimitFactor` bounds the raw response relative to the liquid

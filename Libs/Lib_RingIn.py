@@ -38,6 +38,11 @@ def Latest_Extrapolated_Response(responses, count):
     return responses[count - 1] if count else np.nan
 
 
+def Reached_Max_RingIn_Steps(step, max_steps):
+    """Return true after recording the configured number of diagnostic steps."""
+    return max_steps > 0 and step + 1 >= max_steps
+
+
 def Describe_RingIn_Stop(ResponseRaw, step, ny, max_tbytRI,
                          Do_Ref, Response_Extrapol, countFits,
                          DriftFitResults40perc, DriftFitResults20perc,
@@ -145,6 +150,7 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
 
     time0=time.time(); countFits = 0; step = 0; Converged = False;
     response_limit_factor = float(SPs.get('RingInResponseLimitFactor', 1e4))
+    max_ring_in_steps = int(SPs.get('MaxRingInSteps', 0))
     response_scale = None
     if not Do_Ref:
         reference_response = SPs.get('Dfcbyn_Ref')
@@ -287,6 +293,16 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 countFits, np.nan, np.nan, response_scale, response_limit_factor,
             ), flush=True)
             SPs['RingInFailureReason'] = 'raw_response_unstable'
+            SPs['ProblemFlag'] = 1
+            break
+        if Reached_Max_RingIn_Steps(step, max_ring_in_steps):
+            print(
+                f"Ring-in stopped: reason=max_ring_in_steps reference={Do_Ref} "
+                f"step={step} steps_recorded={step + 1} limit={max_ring_in_steps} "
+                f"raw_response={ResponseRaw!r}",
+                flush=True,
+            )
+            SPs['RingInFailureReason'] = 'max_ring_in_steps'
             SPs['ProblemFlag'] = 1
             break
         

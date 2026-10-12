@@ -3,6 +3,7 @@ import numpy as np
 from Libs.Lib_RingIn import (
     Describe_RingIn_Stop,
     Latest_Extrapolated_Response,
+    Reached_Max_RingIn_Steps,
     Response_Is_Unstable,
 )
 
@@ -23,6 +24,12 @@ def test_latest_extrapolated_response_uses_fit_history():
     history = np.asarray([1 + 2j, 3 + 4j])
     assert np.isnan(Latest_Extrapolated_Response(history, 0))
     assert Latest_Extrapolated_Response(history, 2) == 3 + 4j
+
+
+def test_max_ring_in_steps_counts_recorded_steps():
+    assert not Reached_Max_RingIn_Steps(0, 0)
+    assert not Reached_Max_RingIn_Steps(1998, 2000)
+    assert Reached_Max_RingIn_Steps(1999, 2000)
 
 
 def test_ring_in_stop_diagnostic_distinguishes_raw_response_and_time_limit():
