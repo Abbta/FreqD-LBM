@@ -1,6 +1,10 @@
 import numpy as np
 
-from Libs.Lib_RingIn import Describe_RingIn_Stop, Response_Is_Unstable
+from Libs.Lib_RingIn import (
+    Describe_RingIn_Stop,
+    Latest_Extrapolated_Response,
+    Response_Is_Unstable,
+)
 
 
 def test_response_instability_uses_raw_response():
@@ -13,6 +17,12 @@ def test_response_instability_uses_raw_response():
     )
     assert Response_Is_Unstable(1.1e12 + 0j, response_scale=1e8)
     assert Response_Is_Unstable(np.inf + 0j)
+
+
+def test_latest_extrapolated_response_uses_fit_history():
+    history = np.asarray([1 + 2j, 3 + 4j])
+    assert np.isnan(Latest_Extrapolated_Response(history, 0))
+    assert Latest_Extrapolated_Response(history, 2) == 3 + 4j
 
 
 def test_ring_in_stop_diagnostic_distinguishes_raw_response_and_time_limit():

@@ -33,6 +33,11 @@ def Response_Is_Unstable(ResponseRaw, response_scale=None, limit_factor=1e4):
     return np.abs(ResponseRaw) > limit_factor * max(float(response_scale), 1.0)
 
 
+def Latest_Extrapolated_Response(responses, count):
+    """Return the latest completed fit without indexing the scalar working value."""
+    return responses[count - 1] if count else np.nan
+
+
 def Describe_RingIn_Stop(ResponseRaw, step, ny, max_tbytRI,
                          Do_Ref, Response_Extrapol, countFits,
                          DriftFitResults40perc, DriftFitResults20perc,
@@ -278,7 +283,7 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
         if Response_Is_Unstable(ResponseRaw, response_scale, response_limit_factor):
             print(Describe_RingIn_Stop(
                 ResponseRaw, step, ny, SPs['MaxtbytRI'], Do_Ref,
-                Response_Extrapol[countFits] if countFits else np.nan,
+                Latest_Extrapolated_Response(Response_Extrapols, countFits),
                 countFits, np.nan, np.nan, response_scale, response_limit_factor,
             ), flush=True)
             SPs['RingInFailureReason'] = 'raw_response_unstable'
