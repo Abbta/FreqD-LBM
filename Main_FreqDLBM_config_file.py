@@ -49,6 +49,8 @@ DEFAULTS = {
     "MaxtbytRI": 100.0,
     "SigSmoothDfcbynsFac": 1e-2,
     "RingInFitIntervalSteps": 0,
+    "RingInResponseLimitFactor": 1e4,
+    "SaveRingInHistory": False,
     "ReferenceMethod": "ring_in",
     "ComputeBackend": "numba",
     "JAXDevice": "auto",
@@ -193,6 +195,8 @@ def _validate_config(config):
         raise ValueError("JAXPreallocate must be boolean")
     if not isinstance(config["SaveCylinder2DFields"], bool):
         raise ValueError("SaveCylinder2DFields must be boolean")
+    if not isinstance(config["SaveRingInHistory"], bool):
+        raise ValueError("SaveRingInHistory must be boolean")
     batch_steps = config["JAXBatchSteps"]
     if isinstance(batch_steps, bool) or not isinstance(batch_steps, int) or batch_steps < 1:
         raise ValueError("JAXBatchSteps must be a positive integer")
@@ -215,6 +219,14 @@ def _validate_config(config):
     fit_interval = config["RingInFitIntervalSteps"]
     if isinstance(fit_interval, bool) or not isinstance(fit_interval, int) or fit_interval < 0:
         raise ValueError("RingInFitIntervalSteps must be a nonnegative integer")
+    response_limit_factor = config["RingInResponseLimitFactor"]
+    if (
+        not isinstance(response_limit_factor, (int, float))
+        or isinstance(response_limit_factor, bool)
+        or not np.isfinite(response_limit_factor)
+        or response_limit_factor <= 1
+    ):
+        raise ValueError("RingInResponseLimitFactor must be finite and greater than one")
 
 
 def initialize_sps(config):

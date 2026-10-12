@@ -5,14 +5,22 @@ from Libs.Lib_RingIn import Describe_RingIn_Stop, Response_Is_Unstable
 
 def test_response_instability_uses_raw_response():
     assert not Response_Is_Unstable(1 + 2j)
-    assert Response_Is_Unstable(1e8 + 0j)
+    assert not Response_Is_Unstable(1e8 + 0j, response_scale=1e8)
+    assert not Response_Is_Unstable(6e8 + 0j, response_scale=1e8)
+    assert not Response_Is_Unstable(
+        475718629.09448826j,
+        response_scale=abs(-53886359.73512857 + 54013315.57565427j),
+    )
+    assert Response_Is_Unstable(1.1e12 + 0j, response_scale=1e8)
     assert Response_Is_Unstable(np.inf + 0j)
 
 
 def test_ring_in_stop_diagnostic_distinguishes_raw_response_and_time_limit():
     def message(response, step):
-        return Describe_RingIn_Stop(response, step, 10, 100, True,
-                                    complex(np.nan), 3, complex(np.nan), complex(np.nan))
+        return Describe_RingIn_Stop(
+            response, step, 10, 100, True, complex(np.nan), 3,
+            complex(np.nan), complex(np.nan), response_scale=1e8,
+        )
 
     assert message(1 + 2j, 100) is None
     unstable = message(np.inf + 0j, 100)

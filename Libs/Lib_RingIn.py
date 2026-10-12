@@ -1,5 +1,6 @@
 import numpy as np
-import time 
+import time
+from pathlib import Path
 from scipy.ndimage import gaussian_filter
 from Libs import Lib_General         as General
 from Libs import Lib_Reference       as Reference
@@ -23,20 +24,23 @@ def _ensure_history_capacity(array, min_size, fill=np.nan):
     return grown
 
 
-def Response_Is_Unstable(ResponseRaw, limit=1e7):
-    """Detect divergence from the simulated response, not an early fit."""
-    return (
-        not np.isfinite(ResponseRaw.real)
-        or not np.isfinite(ResponseRaw.imag)
-        or np.abs(ResponseRaw) > limit
-    )
+def Response_Is_Unstable(ResponseRaw, response_scale=None, limit_factor=1e4):
+    """Detect non-finite or implausibly large response relative to its physical scale."""
+    if not np.isfinite(ResponseRaw.real) or not np.isfinite(ResponseRaw.imag):
+        return True
+    if response_scale is None:
+        return False
+    return np.abs(ResponseRaw) > limit_factor * max(float(response_scale), 1.0)
 
 
 def Describe_RingIn_Stop(ResponseRaw, step, ny, max_tbytRI,
                          Do_Ref, Response_Extrapol, countFits,
-                         DriftFitResults40perc, DriftFitResults20perc):
-    """Explain the existing stop test without changing its thresholds."""
-    raw_unstable = Response_Is_Unstable(ResponseRaw)
+                         DriftFitResults40perc, DriftFitResults20perc,
+                         response_scale=None, response_limit_factor=1e4):
+    """Explain which numerical guard stopped the ring-in."""
+    raw_unstable = Response_Is_Unstable(
+        ResponseRaw, response_scale, response_limit_factor
+    )
     time_limit_exceeded = step / ny**2 > max_tbytRI
     if not (raw_unstable or time_limit_exceeded):
         return None
@@ -48,9 +52,32 @@ def Describe_RingIn_Stop(ResponseRaw, step, ny, max_tbytRI,
     return (
         f"Ring-in stopped: reason={'+'.join(reasons)} reference={Do_Ref} "
         f"step={step} tbytRI={step / ny**2:.6g} limit={max_tbytRI} "
+        f"response_scale={response_scale!r} "
+        f"response_limit_factor={response_limit_factor!r} "
         f"raw_response={ResponseRaw!r} fit_response={Response_Extrapol!r} "
         f"fits={countFits} drift40={DriftFitResults40perc!r} "
         f"drift20={DriftFitResults20perc!r}"
+    )
+
+
+def Save_RingIn_History(SPs, Do_Ref, tbytRI_RIs, ResponseRaw_RIs,
+                        Response_RIs, tbytRI_Extrapols, Response_Extrapols,
+                        history_count, fit_count):
+    """Save compact response histories for convergence and divergence diagnosis."""
+    if not SPs.get('SaveRingInHistory', False):
+        return
+    folder = Path(SPs['folder'])
+    folder.mkdir(parents=True, exist_ok=True)
+    role = 'reference' if Do_Ref else 'loaded'
+    np.savez_compressed(
+        folder / f"{SPs['fname0']}_ring_in_{role}.npz",
+        t_over_t_ring_in=tbytRI_RIs[:history_count],
+        raw_response_hz_per_n=ResponseRaw_RIs[:history_count],
+        reference_subtracted_response_hz_per_n=Response_RIs[:history_count],
+        fit_time_over_t_ring_in=tbytRI_Extrapols[:fit_count],
+        extrapolated_response_hz_per_n=Response_Extrapols[:fit_count],
+        response_scale_hz_per_n=SPs.get('RingInResponseScale', np.nan),
+        response_limit_hz_per_n=SPs.get('RingInResponseLimit', np.nan),
     )
 
 def RingIn(SPs,FracVolSph,OscBndPars,\
@@ -103,6 +130,7 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
     tbytRI_Extrapols = np.full(1024, np.nan)
     Response_Extrapols = np.full(1024, np.nan + 1j*np.nan, dtype=complex)
     tbytRI_RIs = np.full(1024, np.nan)
+    ResponseRaw_RIs = np.full(1024, np.nan + 1j*np.nan, dtype=complex)
     Response_RIs = np.full(1024, np.nan + 1j*np.nan, dtype=complex)
     motion_history_size = 1 if is_cylinder2d else 1024
     MotionPars_RI = np.full((motion_history_size, 6), np.nan + 1j*np.nan, dtype=complex)
@@ -111,6 +139,13 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
     AuxParTitles    = ['','','','','','']
 
     time0=time.time(); countFits = 0; step = 0; Converged = False;
+    response_limit_factor = float(SPs.get('RingInResponseLimitFactor', 1e4))
+    response_scale = None
+    if not Do_Ref:
+        reference_response = SPs.get('Dfcbyn_Ref')
+        if reference_response is not None and np.isfinite(reference_response):
+            if np.abs(reference_response) > 0:
+                response_scale = float(np.abs(reference_response))
     if not Do_Ref and SPs['Do_OscBnd'] and is_cylinder2d:
         nLstot,xLs,yLs,OutsideLBMDomains,i_BCs,PoiLs,qs,uxLs,uyLs = \
             OscBnd.Extract_OscBndPars_Cylinder2D(OscBndPars)
@@ -221,22 +256,30 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
         else:
             ResponseRaw = General.Calc_Dfcbyn(SPs,Fx_on_Wall,FxCont_tot,Do_Ref)
         SPs['ResponseRawLast'] = ResponseRaw
+        if response_scale is None and np.isfinite(ResponseRaw):
+            response_scale = max(float(np.abs(ResponseRaw)), 1.0)
+        SPs['RingInResponseScale'] = response_scale
+        SPs['RingInResponseLimit'] = (
+            None if response_scale is None else response_limit_factor * response_scale
+        )
         if step >= len(tbytRI_RIs):
             tbytRI_RIs = _ensure_history_capacity(tbytRI_RIs, step + 1)
+            ResponseRaw_RIs = _ensure_history_capacity(ResponseRaw_RIs, step + 1)
             Response_RIs = _ensure_history_capacity(Response_RIs, step + 1)
             if not is_cylinder2d:
                 MotionPars_RI = _ensure_history_capacity(MotionPars_RI, step + 1)
                 AuxPars_RI = _ensure_history_capacity(AuxPars_RI, step + 1)
 
         tbytRI_RIs[step] = float(step)/ny**2
+        ResponseRaw_RIs[step] = ResponseRaw
         if Do_Ref or is_cylinder2d : Response_RIs[step] = ResponseRaw
         else                       : Response_RIs[step] = ResponseRaw - SPs['Dfcbyn_Ref']
 
-        if Response_Is_Unstable(ResponseRaw):
+        if Response_Is_Unstable(ResponseRaw, response_scale, response_limit_factor):
             print(Describe_RingIn_Stop(
                 ResponseRaw, step, ny, SPs['MaxtbytRI'], Do_Ref,
                 Response_Extrapol[countFits] if countFits else np.nan,
-                countFits, np.nan, np.nan,
+                countFits, np.nan, np.nan, response_scale, response_limit_factor,
             ), flush=True)
             SPs['RingInFailureReason'] = 'raw_response_unstable'
             SPs['ProblemFlag'] = 1
@@ -315,6 +358,7 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 ResponseRaw, step, ny, SPs['MaxtbytRI'], Do_Ref,
                 Response_Extrapol, countFits,
                 DriftFitResults40perc, DriftFitResults20perc,
+                response_scale, response_limit_factor,
             )
             if stop_message is not None:
                 CompTimeMins = np.round((time.time()-time0)/60,2);
@@ -330,6 +374,10 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 break
         step += 1    
         
+    Save_RingIn_History(
+        SPs, Do_Ref, tbytRI_RIs, ResponseRaw_RIs, Response_RIs,
+        tbytRI_Extrapols, Response_Extrapols, step + 1, countFits,
+    )
     if Converged :
         if is_cylinder2d and jax_stepper is not None:
             h = np.asarray(h)

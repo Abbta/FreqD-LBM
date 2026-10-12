@@ -92,7 +92,9 @@ def Reset_SPs(SPs, GridFactor, ParCount ):
     # concerns when the ring-in in terminated and whether ring-in data are smoothed
     SPs['TargetSlopeFitResults'] = 0.1 #a number between 0.1 and 10
     SPs['MaxtbytRI']             = 100 #a number between 50 and 200 
-    SPs['SigSmoothDfcbynsFac']   = 1e-2 # a number between 1e-3 and 1e-1   
+    SPs['SigSmoothDfcbynsFac']   = 1e-2 # a number between 1e-3 and 1e-1
+    SPs['RingInResponseLimitFactor'] = 1e4
+    SPs['SaveRingInHistory'] = False
     
     # concerns the collision step
     SPs['Lambda_TRT']            = 1./4. #0. ,     1./12,  1./6.,   3./16., or   1./4. # 0: BGK collision
