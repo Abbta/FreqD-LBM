@@ -14,15 +14,24 @@ from Libs import Lib_Relax as Relax
 
 
 def Relaxation_Parameters(SPs):
-    """Return exactly the coefficients used by the existing reference ring-in."""
+    """Return TRT coefficients for Johannsmann Eqs. 75 and Sec. 6.2.
+
+    The first two values multiply the equilibrium populations and therefore
+    include the empirical ``+5/2 omega**2 h_eq`` correction.  The last two
+    multiply the current populations.  ``tauInvBulk`` already stores
+    ``tau**-1``.
+    """
     om = SPs['om']
-    tau_inv = 1. / SPs['tauInvBulk']
+    tau_inv = SPs['tauInvBulk']
     lam = General.Validate_Lambda_TRT(SPs)
     tau_inv_asym = (4. - 2. * tau_inv) / (2. - tau_inv + 4 * lam * tau_inv)
-    one_m_tau_inv_m_iom = 1. - tau_inv - 1j * om + 5. / 2. * om**2
-    # Preserve the existing reference kernel's asymmetric coefficient.
-    one_m_tau_inv_m_iom_asym = one_m_tau_inv_m_iom
-    return tau_inv, tau_inv_asym, one_m_tau_inv_m_iom, one_m_tau_inv_m_iom_asym
+    second_order = 5. / 2. * om**2
+    equilibrium_coeff = tau_inv + second_order
+    equilibrium_coeff_asym = tau_inv_asym + second_order
+    population_coeff = 1. - tau_inv - 1j * om
+    population_coeff_asym = 1. - tau_inv_asym - 1j * om
+    return (equilibrium_coeff, equilibrium_coeff_asym,
+            population_coeff, population_coeff_asym)
 
 
 def _shear_basis(cxs, cys, wi):

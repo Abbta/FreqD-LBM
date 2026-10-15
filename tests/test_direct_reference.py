@@ -11,6 +11,56 @@ from Main_FreqDLBM_config_file import load_config
 from scipy.sparse.linalg import spsolve
 
 
+def test_reference_trt_coefficients_match_published_equations():
+    omega = 0.1
+    tau_inv = 0.8
+    sps = dict(om=omega, tauInvBulk=tau_inv, Lambda_TRT=0.25)
+    eq_sym, eq_asym, pop_sym, pop_asym = Reference.Relaxation_Parameters(sps)
+    tau_inv_asym = (
+        (4.0 - 2.0 * tau_inv)
+        / (2.0 - tau_inv + 4.0 * 0.25 * tau_inv)
+    )
+    second_order = 2.5 * omega**2
+
+    assert eq_sym == pytest.approx(tau_inv + second_order)
+    assert eq_asym == pytest.approx(tau_inv_asym + second_order)
+    assert pop_sym == pytest.approx(1.0 - tau_inv - 1j * omega)
+    assert pop_asym == pytest.approx(1.0 - tau_inv_asym - 1j * omega)
+
+
+def test_reference_kernel_applies_published_wall_conditions():
+    ny = 4
+    z_bulk = 0.2 + 0.1j
+    nd, cx, cy, cz, ib, wi, up, notup, down, notdown = General.ReadStencil(3)
+    initial = (
+        np.arange(ny * nd, dtype=float).reshape(ny, nd)
+        + 1j * np.arange(ny * nd, dtype=float).reshape(ny, nd) / 10.0
+    )
+    expected_top_velocity = 2.0 * (initial[-1, 7] - initial[-1, 14]) / (z_bulk + 1.0 / 3.0)
+
+    # Identity collision isolates the streaming and bounce-back equations.
+    updated, wall_force = Stream.FD_LBM_Step_Ref(
+        initial.copy(), ny, nd, cx, cy, cz, wi, ib, up, notup,
+        down, notdown, z_bulk, 0.0, 0.0, 0.0, 1.0, 1.0
+    )
+
+    for i in up:
+        opposite = ib[i]
+        expected = initial[0, opposite] - 6.0 * wi[opposite] * cx[opposite]
+        assert updated[0, i] == pytest.approx(expected)
+    for i in down:
+        opposite = ib[i]
+        expected = (
+            initial[-1, opposite]
+            - 6.0 * wi[opposite] * cx[opposite] * expected_top_velocity
+        )
+        assert updated[-1, i] == pytest.approx(expected)
+    expected_force = sum(
+        (updated[0, i] + initial[0, ib[i]]) * cx[i] for i in up
+    )
+    assert wall_force == pytest.approx(expected_force)
+
+
 @pytest.mark.parametrize("ny,eta,tandel", [(24, 1.0, 1e33), (352, 1.0, 1e33), (32, 2.0, 10.0)])
 def test_direct_reference_satisfies_existing_kernel(ny, eta, tandel):
     # Construct only the parameters needed by the direct reference and kernel.
