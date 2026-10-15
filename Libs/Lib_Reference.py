@@ -56,7 +56,7 @@ def Build_Reduced_Update(SPs, boundary_mode='qcm_impedance',
         raise ValueError('Direct reference needs at least two y nodes')
     nd, cxs, cys, czs, ibars, wi, *_ = General.ReadStencil(3)
     pack, unpack = _shear_basis(cxs, cys, wi)
-    coefficients = Relaxation_Parameters(SPs)
+    coefficients = Relaxation_Parameters(SPs, include_second_order)
     collision_full = np.column_stack([
         Relax.Relax_3D(pack[:, j].copy(), cxs, cys, czs, wi, ibars, *coefficients)
         for j in range(3)
@@ -180,7 +180,7 @@ def Analyze_Iteration_Stability(SPs, warmup_steps, measurement_steps,
     ny = int(SPs['ny'])
     nd, cxs, cys, czs, ibars, wi, i_ups, i_notups, i_downs, i_notdowns = \
         General.ReadStencil(3)
-    coefficients = Relaxation_Parameters(SPs, include_second_order)
+    coefficients = Relaxation_Parameters(SPs)
 
     def step(state):
         return Stream.FD_LBM_Step_Ref(
