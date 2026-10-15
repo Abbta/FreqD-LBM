@@ -116,6 +116,15 @@ def Reference_Stability_Diagnostic(SPs):
         measurement_steps=result['measurement_steps'],
         perturbation_relative=result['perturbation_relative'],
         random_seed=result['random_seed'],
+        comparison_names=np.asarray(
+            [case['name'] for case in result['comparison_cases']]
+        ),
+        comparison_eigenvalues=np.asarray(
+            [case['dominant_eigenvalue'] for case in result['comparison_cases']]
+        ),
+        comparison_spectral_radii=np.asarray(
+            [case['spectral_radius'] for case in result['comparison_cases']]
+        ),
     )
     print(
         'Reference stability diagnostic: '
@@ -124,6 +133,12 @@ def Reference_Stability_Diagnostic(SPs):
         f"measured_tail_gain={result['tail_geometric_mean_amplification']:.12g}",
         flush=True,
     )
+    for case in result['comparison_cases']:
+        print(
+            f"  {case['name']}: spectral_radius={case['spectral_radius']:.12g} "
+            f"eigenvalue={case['dominant_eigenvalue']}",
+            flush=True,
+        )
     return result
 
 def RingIn(SPs,FracVolSph,OscBndPars,\

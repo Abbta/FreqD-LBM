@@ -14,4 +14,8 @@ AI-written, 2026-10-15. Source: Johannsmann et al. (2025), DOI
 
 The paper states that the second-order correction is empirical and lacks a
 consistent Chapman--Enskog derivation. Loaded-domain collision uses the old
-placement and must be audited separately before these changes are pushed.
+placement and must be audited separately before this branch is merged.
+
+The stability diagnostic compares periodic and QCM/impedance-boundary updates,
+each with and without the empirical second-order correction. This separates
+bulk amplification from boundary-induced amplification.

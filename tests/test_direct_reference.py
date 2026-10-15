@@ -27,6 +27,29 @@ def test_reference_trt_coefficients_match_published_equations():
     assert pop_sym == pytest.approx(1.0 - tau_inv - 1j * omega)
     assert pop_asym == pytest.approx(1.0 - tau_inv_asym - 1j * omega)
 
+    eq_sym, eq_asym, pop_sym, pop_asym = Reference.Relaxation_Parameters(
+        sps, include_second_order=False
+    )
+    assert eq_sym == pytest.approx(tau_inv)
+    assert eq_asym == pytest.approx(tau_inv_asym)
+    assert pop_sym == pytest.approx(1.0 - tau_inv - 1j * omega)
+    assert pop_asym == pytest.approx(1.0 - tau_inv_asym - 1j * omega)
+
+
+def test_reference_stability_comparison_isolates_four_cases():
+    sps = dict(
+        dimensions=3, ny=6, om=0.05, tauInvBulk=1.0,
+        Lambda_TRT=0.25, ZBulk=0.1 + 0.1j,
+    )
+    cases = Reference.Compare_Stability_Cases(sps)
+    assert [case['name'] for case in cases] == [
+        'periodic_no_correction',
+        'periodic_with_correction',
+        'qcm_impedance_no_correction',
+        'qcm_impedance_with_correction',
+    ]
+    assert all(np.isfinite(case['spectral_radius']) for case in cases)
+
 
 def test_reference_kernel_applies_published_wall_conditions():
     ny = 4

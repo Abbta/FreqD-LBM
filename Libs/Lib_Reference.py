@@ -13,7 +13,7 @@ from Libs import Lib_General as General
 from Libs import Lib_Relax as Relax
 
 
-def Relaxation_Parameters(SPs):
+def Relaxation_Parameters(SPs, include_second_order=True):
     """Return TRT coefficients for Johannsmann Eqs. 75 and Sec. 6.2.
 
     The first two values multiply the equilibrium populations and therefore
@@ -25,7 +25,7 @@ def Relaxation_Parameters(SPs):
     tau_inv = SPs['tauInvBulk']
     lam = General.Validate_Lambda_TRT(SPs)
     tau_inv_asym = (4. - 2. * tau_inv) / (2. - tau_inv + 4 * lam * tau_inv)
-    second_order = 5. / 2. * om**2
+    second_order = 5. / 2. * om**2 if include_second_order else 0.
     equilibrium_coeff = tau_inv + second_order
     equilibrium_coeff_asym = tau_inv_asym + second_order
     population_coeff = 1. - tau_inv - 1j * om
@@ -46,8 +46,9 @@ def _shear_basis(cxs, cys, wi):
     return pack, unpack
 
 
-def Build_Reduced_Update(SPs):
-    """Build the affine reference iteration in its invariant shear subspace."""
+def Build_Reduced_Update(SPs, boundary_mode='qcm_impedance',
+                         include_second_order=True):
+    """Build a reduced liquid update for a selected boundary experiment."""
     if SPs['dimensions'] != 3:
         raise ValueError('Direct reference currently supports the D3Q19 reference only')
     ny = int(SPs['ny'])
@@ -67,23 +68,32 @@ def Build_Reduced_Update(SPs):
     # Stream the three x-momentum groups (c_y = -1, 0, +1).
     # At the QCM: m_+(0) = 1/3 - m_-(0).
     # At the Fourier top: m_-(ny-1) = (1-3Z)/(1+3Z) m_+(ny-1).
+    if boundary_mode not in ('qcm_impedance', 'periodic'):
+        raise ValueError(f'Unknown reference boundary mode {boundary_mode!r}')
     z_bulk = SPs['ZBulk']
-    if abs(1 + 3*z_bulk) < 1e-14:
+    if boundary_mode == 'qcm_impedance' and abs(1 + 3*z_bulk) < 1e-14:
         raise ValueError('Singular reference top impedance')
     reflection = (1 - 3*z_bulk) / (1 + 3*z_bulk)
     rows, columns, values = [], [], []
     stream_drive = np.zeros(3 * ny, dtype=np.complex128)
     for y in range(ny):
-        terms = (
-            (3 * (y+1), 1) if y < ny-1 else (3*y+2, reflection),
-            (3*y+1, 1),
-            (3 * (y-1)+2, 1) if y > 0 else (3*y, -1),
-        )
+        if boundary_mode == 'periodic':
+            terms = (
+                (3 * ((y+1) % ny), 1),
+                (3*y+1, 1),
+                (3 * ((y-1) % ny)+2, 1),
+            )
+        else:
+            terms = (
+                (3 * (y+1), 1) if y < ny-1 else (3*y+2, reflection),
+                (3*y+1, 1),
+                (3 * (y-1)+2, 1) if y > 0 else (3*y, -1),
+            )
         for group, (column, value) in enumerate(terms):
             rows.append(3*y + group)
             columns.append(column)
             values.append(value)
-        if y == 0:
+        if boundary_mode == 'qcm_impedance' and y == 0:
             stream_drive[2] = 1 / 3
     streaming = coo_matrix(
         (values, (rows, columns)), shape=(3*ny, 3*ny), dtype=np.complex128
@@ -92,6 +102,36 @@ def Build_Reduced_Update(SPs):
     update = block_collision @ streaming
     drive = block_collision @ stream_drive
     return update, drive, pack, unpack
+
+
+def Compare_Stability_Cases(SPs):
+    """Return spectral stability with boundaries and correction isolated."""
+    cases = (
+        ('periodic_no_correction', 'periodic', False),
+        ('periodic_with_correction', 'periodic', True),
+        ('qcm_impedance_no_correction', 'qcm_impedance', False),
+        ('qcm_impedance_with_correction', 'qcm_impedance', True),
+    )
+    results = []
+    for name, boundary_mode, include_second_order in cases:
+        update, _, _, _ = Build_Reduced_Update(
+            SPs, boundary_mode=boundary_mode,
+            include_second_order=include_second_order,
+        )
+        eigenvalues = eigs(
+            update, k=min(6, update.shape[0] - 2), which='LM',
+            return_eigenvectors=False, tol=1e-11,
+            maxiter=max(2000, 20 * update.shape[0]),
+        )
+        dominant = eigenvalues[np.argmax(np.abs(eigenvalues))]
+        results.append({
+            'name': name,
+            'boundary_mode': boundary_mode,
+            'include_second_order': include_second_order,
+            'dominant_eigenvalue': complex(dominant),
+            'spectral_radius': float(abs(dominant)),
+        })
+    return results
 
 
 def Solve_Direct(SPs):
@@ -140,7 +180,7 @@ def Analyze_Iteration_Stability(SPs, warmup_steps, measurement_steps,
     ny = int(SPs['ny'])
     nd, cxs, cys, czs, ibars, wi, i_ups, i_notups, i_downs, i_notdowns = \
         General.ReadStencil(3)
-    coefficients = Relaxation_Parameters(SPs)
+    coefficients = Relaxation_Parameters(SPs, include_second_order)
 
     def step(state):
         return Stream.FD_LBM_Step_Ref(
@@ -196,6 +236,7 @@ def Analyze_Iteration_Stability(SPs, warmup_steps, measurement_steps,
         'amplification': amplification,
         'rayleigh': rayleigh,
         'wall_force_difference': wall_force_difference,
+        'comparison_cases': Compare_Stability_Cases(SPs),
     }
     SPs['ReferenceStabilityResult'] = result
     return result
