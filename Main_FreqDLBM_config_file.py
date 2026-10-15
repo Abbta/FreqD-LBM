@@ -41,6 +41,7 @@ DEFAULTS = {
     "UpdateMotionFac": 0.02,
     "Do_SavePlots": False,
     "SaveCylinder2DFields": False,
+    "SaveCylinder3DFields": False,
     "Do_Plot_MotionPars": True,
     "Do_Plot_RingIns": True,
     "PrintIntervalFac": 1.0,
@@ -57,6 +58,7 @@ DEFAULTS = {
     "ReferenceStabilityMeasurementSteps": 600,
     "ReferenceStabilityPerturbationRelative": 1e-7,
     "ReferenceStabilitySeed": 1729,
+    "ReferenceStabilitySecondOrderCoefficients": [-2.5, 2.5, -0.5, 0.0],
     "ReferenceMethod": "ring_in",
     "ComputeBackend": "numba",
     "JAXDevice": "auto",
@@ -201,12 +203,24 @@ def _validate_config(config):
         raise ValueError("JAXPreallocate must be boolean")
     if not isinstance(config["SaveCylinder2DFields"], bool):
         raise ValueError("SaveCylinder2DFields must be boolean")
+    if not isinstance(config["SaveCylinder3DFields"], bool):
+        raise ValueError("SaveCylinder3DFields must be boolean")
     if not isinstance(config["SaveRingInHistory"], bool):
         raise ValueError("SaveRingInHistory must be boolean")
     if not isinstance(config["ReferenceStabilityDiagnostic"], bool):
         raise ValueError("ReferenceStabilityDiagnostic must be boolean")
     if config["ReferenceStabilityDiagnostic"] and config["dimensions"] != 3:
         raise ValueError("Reference stability diagnostic requires a D3Q19 problem")
+    coefficients = config["ReferenceStabilitySecondOrderCoefficients"]
+    if not isinstance(coefficients, list) or not coefficients:
+        raise ValueError("ReferenceStabilitySecondOrderCoefficients must be a nonempty list")
+    if any(
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not np.isfinite(value)
+        for value in coefficients
+    ):
+        raise ValueError("Reference stability coefficients must be finite numbers")
     for key in ("ReferenceStabilityWarmupSteps", "ReferenceStabilityMeasurementSteps"):
         value = config[key]
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:

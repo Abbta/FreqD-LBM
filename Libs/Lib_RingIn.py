@@ -125,6 +125,15 @@ def Reference_Stability_Diagnostic(SPs):
         comparison_spectral_radii=np.asarray(
             [case['spectral_radius'] for case in result['comparison_cases']]
         ),
+        comparison_second_order_coefficients=np.asarray(
+            [case['second_order_coefficient'] for case in result['comparison_cases']]
+        ),
+        comparison_direct_reference_hz_per_n=np.asarray(
+            [case['direct_reference_hz_per_n'] for case in result['comparison_cases']]
+        ),
+        comparison_direct_residuals=np.asarray(
+            [case['direct_residual'] for case in result['comparison_cases']]
+        ),
     )
     print(
         'Reference stability diagnostic: '
@@ -136,7 +145,9 @@ def Reference_Stability_Diagnostic(SPs):
     for case in result['comparison_cases']:
         print(
             f"  {case['name']}: spectral_radius={case['spectral_radius']:.12g} "
-            f"eigenvalue={case['dominant_eigenvalue']}",
+            f"eigenvalue={case['dominant_eigenvalue']} "
+            f"direct_response={case['direct_reference_hz_per_n']} Hz/n "
+            f"residual={case['direct_residual']:.3g}",
             flush=True,
         )
     return result
@@ -500,6 +511,27 @@ def RingIn(SPs,FracVolSph,OscBndPars,\
                 dr,ux,uy,uz = \
                     OscBnd.Calc_dr_ux_uy_uz_OscBnd(np.asarray(h),cxs,cys,czs,\
                         OutsideLBMDomains,InParticles,OscBndAmps,SPs)
+                if SPs['ProblemType'] == 'CylinderQCM3D' and SPs.get('SaveCylinder3DFields', False):
+                    dx_nm = float(SPs['Dx_nm'])
+                    x_nm = (np.arange(SPs['nx']) - (SPs['nx'] - 1) / 2.0) * dx_nm
+                    y_nm = np.arange(SPs['ny']) * dx_nm
+                    z_nm = (np.arange(SPs['nz']) - (SPs['nz'] - 1) / 2.0) * dx_nm
+                    np.savez_compressed(
+                        SPs['folder'] + '/cylinder3d-fields.npz',
+                        x_nm=x_nm,
+                        y_nm=y_nm,
+                        z_nm=z_nm,
+                        ux_lbm_complex=ux,
+                        uy_lbm_complex=uy,
+                        uz_lbm_complex=uz,
+                        delta_rho_lbm_complex=dr,
+                        solid_mask=OutsideLBMDomains.astype(bool),
+                        cylinder_mask=InParticles[:,:,:,0].astype(bool),
+                        axes=np.asarray('x,y,z'),
+                        field_convention=np.asarray(
+                            'exp(+i omega t); y=0 is QCM; x,z centered at the periodic-cell center'
+                        ),
+                    )
             if SPs['ProblemType'] == 'FilmResonance': 
                 dr = np.zeros(ny)
                 ux = np.ones(ny,dtype=np.complex128)*np.nan

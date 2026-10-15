@@ -13,7 +13,8 @@ from Libs import Lib_General as General
 from Libs import Lib_Relax as Relax
 
 
-def Relaxation_Parameters(SPs, include_second_order=True):
+def Relaxation_Parameters(SPs, second_order_coefficient=2.5,
+                         include_second_order=None):
     """Return TRT coefficients for Johannsmann Eqs. 75 and Sec. 6.2.
 
     The first two values multiply the equilibrium populations and therefore
@@ -25,7 +26,9 @@ def Relaxation_Parameters(SPs, include_second_order=True):
     tau_inv = SPs['tauInvBulk']
     lam = General.Validate_Lambda_TRT(SPs)
     tau_inv_asym = (4. - 2. * tau_inv) / (2. - tau_inv + 4 * lam * tau_inv)
-    second_order = 5. / 2. * om**2 if include_second_order else 0.
+    if include_second_order is not None:
+        second_order_coefficient = 2.5 if include_second_order else 0.0
+    second_order = float(second_order_coefficient) * om**2
     equilibrium_coeff = tau_inv + second_order
     equilibrium_coeff_asym = tau_inv_asym + second_order
     population_coeff = 1. - tau_inv - 1j * om
@@ -47,7 +50,8 @@ def _shear_basis(cxs, cys, wi):
 
 
 def Build_Reduced_Update(SPs, boundary_mode='qcm_impedance',
-                         include_second_order=True):
+                         second_order_coefficient=2.5,
+                         include_second_order=None):
     """Build a reduced liquid update for a selected boundary experiment."""
     if SPs['dimensions'] != 3:
         raise ValueError('Direct reference currently supports the D3Q19 reference only')
@@ -56,7 +60,9 @@ def Build_Reduced_Update(SPs, boundary_mode='qcm_impedance',
         raise ValueError('Direct reference needs at least two y nodes')
     nd, cxs, cys, czs, ibars, wi, *_ = General.ReadStencil(3)
     pack, unpack = _shear_basis(cxs, cys, wi)
-    coefficients = Relaxation_Parameters(SPs, include_second_order)
+    coefficients = Relaxation_Parameters(
+        SPs, second_order_coefficient, include_second_order
+    )
     collision_full = np.column_stack([
         Relax.Relax_3D(pack[:, j].copy(), cxs, cys, czs, wi, ibars, *coefficients)
         for j in range(3)
@@ -104,59 +110,82 @@ def Build_Reduced_Update(SPs, boundary_mode='qcm_impedance',
     return update, drive, pack, unpack
 
 
-def Compare_Stability_Cases(SPs):
-    """Return spectral stability with boundaries and correction isolated."""
-    cases = (
-        ('periodic_no_correction', 'periodic', False),
-        ('periodic_with_correction', 'periodic', True),
-        ('qcm_impedance_no_correction', 'qcm_impedance', False),
-        ('qcm_impedance_with_correction', 'qcm_impedance', True),
+def _solve_direct_variant(SPs, second_order_coefficient):
+    """Solve the reduced stationary update for a selected correction."""
+    update, drive, _, _ = Build_Reduced_Update(
+        SPs, second_order_coefficient=second_order_coefficient
     )
-    results = []
-    for name, boundary_mode, include_second_order in cases:
-        update, _, _, _ = Build_Reduced_Update(
-            SPs, boundary_mode=boundary_mode,
-            include_second_order=include_second_order,
-        )
-        eigenvalues = eigs(
-            update, k=min(6, update.shape[0] - 2), which='LM',
-            return_eigenvectors=False, tol=1e-11,
-            maxiter=max(2000, 20 * update.shape[0]),
-        )
-        dominant = eigenvalues[np.argmax(np.abs(eigenvalues))]
-        results.append({
-            'name': name,
-            'boundary_mode': boundary_mode,
-            'include_second_order': include_second_order,
-            'dominant_eigenvalue': complex(dominant),
-            'spectral_radius': float(abs(dominant)),
-        })
-    return results
-
-
-def Solve_Direct(SPs):
-    """Set the reference load from the stationary D3Q19 update, in Hz/n.
-
-    The walls, frequency correction and collision coefficients match
-    FD_LBM_Step_Ref. Raises if the linear solve does not satisfy its equations.
-    """
-    update, drive, pack, _ = Build_Reduced_Update(SPs)
     ny = int(SPs['ny'])
     solution = spsolve(eye(3*ny, format='csr') - update, drive)
     residual = np.max(np.abs(update @ solution + drive - solution))
     if not np.all(np.isfinite(solution)) or not np.isfinite(residual) or residual > 1e-9:
         raise RuntimeError(f'Direct reference solve failed: residual={residual}')
-
-    # The reference kernel computes the QCM wall force before collision.
     wall_force = 1 / 3 - 2 * solution[0]
     response = General.Calc_Dfcbyn(SPs, wall_force, 0, True)
     SPs['Dfcbyn_Ref'] = response
     SPs['Dfratio_Ref'] = response.imag / (-response.real)
-    SPs['StdErr_Ref'] = np.nan  # A direct solve has no ring-in fit error.
+    SPs['StdErr_Ref'] = np.nan
     SPs['ReferenceResidual_LBM'] = float(residual)
     SPs['ProblemFlag'] = 0
+    return response, float(residual)
+
+
+def Solve_Direct(SPs):
+    """Set the production reference load using the current correction."""
+    response, residual = _solve_direct_variant(SPs, 2.5)
     print(f'Direct liquid reference: Dfcbyn_Ref={response} Hz/n residual={residual:.3g}', flush=True)
     return response
+
+
+def Compare_Stability_Cases(SPs, second_order_coefficients=None):
+    """Compare iteration stability and direct reference loads by coefficient."""
+    results = []
+    if second_order_coefficients is None:
+        cases = (
+            ('periodic_no_correction', 'periodic', 0.0),
+            ('periodic_with_correction', 'periodic', 2.5),
+            ('qcm_impedance_no_correction', 'qcm_impedance', 0.0),
+            ('qcm_impedance_with_correction', 'qcm_impedance', 2.5),
+        )
+        for name, boundary_mode, coefficient in cases:
+            update, _, _, _ = Build_Reduced_Update(
+                SPs, boundary_mode=boundary_mode,
+                second_order_coefficient=coefficient,
+            )
+            eigenvalues = eigs(update, k=min(6, update.shape[0] - 2),
+                               which='LM', return_eigenvectors=False,
+                               tol=1e-11,
+                               maxiter=max(2000, 20 * update.shape[0]))
+            dominant = eigenvalues[np.argmax(np.abs(eigenvalues))]
+            results.append({
+                'name': name,
+                'boundary_mode': boundary_mode,
+                'include_second_order': bool(coefficient),
+                'dominant_eigenvalue': complex(dominant),
+                'spectral_radius': float(abs(dominant)),
+            })
+        return results
+    for coefficient in second_order_coefficients:
+        update, _, _, _ = Build_Reduced_Update(
+            SPs, boundary_mode='qcm_impedance',
+            second_order_coefficient=coefficient,
+        )
+        eigenvalues = eigs(update, k=min(6, update.shape[0] - 2), which='LM',
+                           return_eigenvectors=False, tol=1e-11,
+                           maxiter=max(2000, 20 * update.shape[0]))
+        dominant = eigenvalues[np.argmax(np.abs(eigenvalues))]
+        direct_sps = dict(SPs)
+        direct_response, residual = _solve_direct_variant(direct_sps, coefficient)
+        results.append({
+            'name': f'coefficient_{coefficient:+g}',
+            'second_order_coefficient': float(coefficient),
+            'boundary_mode': 'qcm_impedance',
+            'dominant_eigenvalue': complex(dominant),
+            'spectral_radius': float(abs(dominant)),
+            'direct_reference_hz_per_n': complex(direct_response),
+            'direct_residual': residual,
+        })
+    return results
 
 
 def Analyze_Iteration_Stability(SPs, warmup_steps, measurement_steps,
@@ -236,7 +265,9 @@ def Analyze_Iteration_Stability(SPs, warmup_steps, measurement_steps,
         'amplification': amplification,
         'rayleigh': rayleigh,
         'wall_force_difference': wall_force_difference,
-        'comparison_cases': Compare_Stability_Cases(SPs),
+        'comparison_cases': Compare_Stability_Cases(
+            SPs, SPs.get('ReferenceStabilitySecondOrderCoefficients', [-2.5, 2.5, -0.5, 0.0])
+        ),
     }
     SPs['ReferenceStabilityResult'] = result
     return result

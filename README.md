@@ -36,9 +36,11 @@ All production paths require TRT with `Lambda_TRT=0.25`; conflicting configs fai
 Set `ComputeBackend="jax"` to run `Cylinder2D` (D2Q9) or the 3D
 oscillating-boundary step (D3Q19) with JAX on `JAXDevice="auto"`, `"cpu"`, or
 `"gpu"`. Double precision is mandatory. The default remains `"numba"`; JAX
-does not change geometry, TRT collision, interpolated cylinder boundaries,
-convergence, or output handling. The 2D cylinder JAX step preserves its periodic
-in-plane boundaries and does not use the 3D Fourier-top operator.
+  does not change geometry, TRT collision, interpolated cylinder boundaries,
+  convergence, or output handling. The 2D cylinder JAX step preserves its periodic
+  in-plane boundaries and does not use the 3D Fourier-top operator.
+  Set `SaveCylinder3DFields=true` for `CylinderQCM3D` to save the converged complex
+  velocity, density perturbation, and solid/cylinder masks in `cylinder3d-fields.npz`.
 Install the CPU validation dependency with `requirements-jax-cpu.txt`. On Pelle,
 install the JAX GPU wheel matching the loaded CUDA version before selecting `"gpu"`;
 the solver fails instead of silently falling back when no GPU is available.
