@@ -52,6 +52,11 @@ DEFAULTS = {
     "MaxRingInSteps": 0,
     "RingInResponseLimitFactor": 1e4,
     "SaveRingInHistory": False,
+    "ReferenceStabilityDiagnostic": False,
+    "ReferenceStabilityWarmupSteps": 200,
+    "ReferenceStabilityMeasurementSteps": 600,
+    "ReferenceStabilityPerturbationRelative": 1e-7,
+    "ReferenceStabilitySeed": 1729,
     "ReferenceMethod": "ring_in",
     "ComputeBackend": "numba",
     "JAXDevice": "auto",
@@ -198,6 +203,25 @@ def _validate_config(config):
         raise ValueError("SaveCylinder2DFields must be boolean")
     if not isinstance(config["SaveRingInHistory"], bool):
         raise ValueError("SaveRingInHistory must be boolean")
+    if not isinstance(config["ReferenceStabilityDiagnostic"], bool):
+        raise ValueError("ReferenceStabilityDiagnostic must be boolean")
+    if config["ReferenceStabilityDiagnostic"] and config["dimensions"] != 3:
+        raise ValueError("Reference stability diagnostic requires a D3Q19 problem")
+    for key in ("ReferenceStabilityWarmupSteps", "ReferenceStabilityMeasurementSteps"):
+        value = config[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"{key} must be a positive integer")
+    perturbation = config["ReferenceStabilityPerturbationRelative"]
+    if (
+        isinstance(perturbation, bool)
+        or not isinstance(perturbation, (int, float))
+        or not np.isfinite(perturbation)
+        or perturbation <= 0
+    ):
+        raise ValueError("ReferenceStabilityPerturbationRelative must be positive and finite")
+    seed = config["ReferenceStabilitySeed"]
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("ReferenceStabilitySeed must be a nonnegative integer")
     batch_steps = config["JAXBatchSteps"]
     if isinstance(batch_steps, bool) or not isinstance(batch_steps, int) or batch_steps < 1:
         raise ValueError("JAXBatchSteps must be a positive integer")
@@ -291,7 +315,10 @@ def run(config):
             f"The simulation path for {sps['ProblemType']} is not fully wired yet"
         )
     _prepare_geometry(sps)
-    _prepare_boundaries(sps)
+    if sps["ReferenceStabilityDiagnostic"]:
+        sps["OscBndPars"] = None
+    else:
+        _prepare_boundaries(sps)
     sps["delta"] = sps["delta0_nm"] / sps["Dx_nm"] / sps["n"] ** 0.5
     sps["om"] = 2.0 * (1.0 / 6.0) / sps["delta"] ** 2
     IO.Set_fname(sps)

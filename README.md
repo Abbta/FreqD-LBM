@@ -56,3 +56,7 @@ histories as `.npz` files.
 equations as a sparse linear system; the default `"ring_in"` keeps the original
 iteration. The direct option supports 3D cases and records its residual and
 reference load. The loaded cylinder still uses ring-in and may independently fail.
+Set `ReferenceStabilityDiagnostic=true` to run only the cylinder-free D3Q19
+reference analysis. It compares a matrix-free perturbation power iteration with
+the dominant eigenvalue of the reduced affine update and saves the histories as
+`<fname0>_reference_stability.npz`.

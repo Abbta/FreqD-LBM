@@ -7,7 +7,7 @@ its stationary affine update directly, without changing the loaded solver.
 
 import numpy as np
 from scipy.sparse import coo_matrix, eye, kron
-from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import eigs, spsolve
 
 from Libs import Lib_General as General
 from Libs import Lib_Relax as Relax
@@ -37,12 +37,8 @@ def _shear_basis(cxs, cys, wi):
     return pack, unpack
 
 
-def Solve_Direct(SPs):
-    """Set the reference load from the stationary D3Q19 update, in Hz/n.
-
-    The walls, frequency correction and collision coefficients match
-    FD_LBM_Step_Ref. Raises if the linear solve does not satisfy its equations.
-    """
+def Build_Reduced_Update(SPs):
+    """Build the affine reference iteration in its invariant shear subspace."""
     if SPs['dimensions'] != 3:
         raise ValueError('Direct reference currently supports the D3Q19 reference only')
     ny = int(SPs['ny'])
@@ -86,6 +82,17 @@ def Solve_Direct(SPs):
     block_collision = kron(eye(ny, format='csr'), collision, format='csr')
     update = block_collision @ streaming
     drive = block_collision @ stream_drive
+    return update, drive, pack, unpack
+
+
+def Solve_Direct(SPs):
+    """Set the reference load from the stationary D3Q19 update, in Hz/n.
+
+    The walls, frequency correction and collision coefficients match
+    FD_LBM_Step_Ref. Raises if the linear solve does not satisfy its equations.
+    """
+    update, drive, pack, _ = Build_Reduced_Update(SPs)
+    ny = int(SPs['ny'])
     solution = spsolve(eye(3*ny, format='csr') - update, drive)
     residual = np.max(np.abs(update @ solution + drive - solution))
     if not np.all(np.isfinite(solution)) or not np.isfinite(residual) or residual > 1e-9:
@@ -101,3 +108,85 @@ def Solve_Direct(SPs):
     SPs['ProblemFlag'] = 0
     print(f'Direct liquid reference: Dfcbyn_Ref={response} Hz/n residual={residual:.3g}', flush=True)
     return response
+
+
+def Analyze_Iteration_Stability(SPs, warmup_steps, measurement_steps,
+                                perturbation_relative, random_seed):
+    """Measure growth of a small perturbation under the reference iteration.
+
+    The reference update is affine. Two states subject to the same wall drive
+    therefore differ by the homogeneous update operator. Renormalizing that
+    difference after every step implements a matrix-free power iteration.
+    """
+    from Libs import Lib_StreamCollide as Stream
+
+    update, _, pack, _ = Build_Reduced_Update(SPs)
+    eigenvalues = eigs(
+        update, k=min(6, update.shape[0] - 2), which='LM',
+        return_eigenvectors=False, tol=1e-11,
+        maxiter=max(2000, 20 * update.shape[0]),
+    )
+    dominant_eigenvalue = eigenvalues[np.argmax(np.abs(eigenvalues))]
+
+    ny = int(SPs['ny'])
+    nd, cxs, cys, czs, ibars, wi, i_ups, i_notups, i_downs, i_notdowns = \
+        General.ReadStencil(3)
+    coefficients = Relaxation_Parameters(SPs)
+
+    def step(state):
+        return Stream.FD_LBM_Step_Ref(
+            state, ny, nd, cxs, cys, czs, wi, ibars,
+            i_ups, i_notups, i_downs, i_notdowns,
+            SPs['ZBulk'], SPs['om'], *coefficients,
+        )
+
+    baseline = np.zeros((ny, nd), dtype=np.complex128)
+    for _ in range(warmup_steps):
+        baseline, _ = step(baseline)
+
+    rng = np.random.default_rng(random_seed)
+    moment_perturbation = (
+        rng.standard_normal((ny, 3)) + 1j * rng.standard_normal((ny, 3))
+    )
+    perturbation = moment_perturbation @ pack.T
+    baseline_norm = np.linalg.norm(baseline)
+    target_norm = perturbation_relative * max(baseline_norm, 1.0)
+    perturbation *= target_norm / np.linalg.norm(perturbation)
+    trial = baseline + perturbation
+
+    amplification = np.empty(measurement_steps)
+    rayleigh = np.empty(measurement_steps, dtype=np.complex128)
+    wall_force_difference = np.empty(measurement_steps, dtype=np.complex128)
+    for index in range(measurement_steps):
+        previous = trial - baseline
+        baseline, baseline_force = step(baseline)
+        trial, trial_force = step(trial)
+        difference = trial - baseline
+        previous_norm = np.linalg.norm(previous)
+        difference_norm = np.linalg.norm(difference)
+        amplification[index] = difference_norm / previous_norm
+        rayleigh[index] = np.vdot(previous, difference) / np.vdot(previous, previous)
+        wall_force_difference[index] = trial_force - baseline_force
+        if not np.isfinite(difference_norm) or difference_norm == 0:
+            raise RuntimeError('Reference perturbation became non-finite or vanished')
+        difference *= target_norm / difference_norm
+        trial = baseline + difference
+
+    tail_start = measurement_steps // 2
+    tail_amplification = amplification[tail_start:]
+    geometric_mean = float(np.exp(np.mean(np.log(tail_amplification))))
+    result = {
+        'dominant_eigenvalue': complex(dominant_eigenvalue),
+        'spectral_radius': float(abs(dominant_eigenvalue)),
+        'tail_geometric_mean_amplification': geometric_mean,
+        'tail_median_amplification': float(np.median(tail_amplification)),
+        'warmup_steps': int(warmup_steps),
+        'measurement_steps': int(measurement_steps),
+        'perturbation_relative': float(perturbation_relative),
+        'random_seed': int(random_seed),
+        'amplification': amplification,
+        'rayleigh': rayleigh,
+        'wall_force_difference': wall_force_difference,
+    }
+    SPs['ReferenceStabilityResult'] = result
+    return result

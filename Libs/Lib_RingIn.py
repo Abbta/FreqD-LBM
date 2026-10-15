@@ -90,6 +90,42 @@ def Save_RingIn_History(SPs, Do_Ref, tbytRI_RIs, ResponseRaw_RIs,
         response_limit_hz_per_n=SPs.get('RingInResponseLimit', np.nan),
     )
 
+
+def Reference_Stability_Diagnostic(SPs):
+    """Run and save a bounded perturbation analysis of the liquid reference."""
+    result = Reference.Analyze_Iteration_Stability(
+        SPs,
+        warmup_steps=int(SPs['ReferenceStabilityWarmupSteps']),
+        measurement_steps=int(SPs['ReferenceStabilityMeasurementSteps']),
+        perturbation_relative=float(SPs['ReferenceStabilityPerturbationRelative']),
+        random_seed=int(SPs['ReferenceStabilitySeed']),
+    )
+    folder = Path(SPs['folder'])
+    folder.mkdir(parents=True, exist_ok=True)
+    output = folder / f"{SPs['fname0']}_reference_stability.npz"
+    np.savez_compressed(
+        output,
+        amplification=result['amplification'],
+        rayleigh=result['rayleigh'],
+        wall_force_difference=result['wall_force_difference'],
+        dominant_eigenvalue=result['dominant_eigenvalue'],
+        spectral_radius=result['spectral_radius'],
+        tail_geometric_mean_amplification=result['tail_geometric_mean_amplification'],
+        tail_median_amplification=result['tail_median_amplification'],
+        warmup_steps=result['warmup_steps'],
+        measurement_steps=result['measurement_steps'],
+        perturbation_relative=result['perturbation_relative'],
+        random_seed=result['random_seed'],
+    )
+    print(
+        'Reference stability diagnostic: '
+        f"eigenvalue={result['dominant_eigenvalue']} "
+        f"spectral_radius={result['spectral_radius']:.12g} "
+        f"measured_tail_gain={result['tail_geometric_mean_amplification']:.12g}",
+        flush=True,
+    )
+    return result
+
 def RingIn(SPs,FracVolSph,OscBndPars,\
         tauInvs,tauInvs_Asym,one_m_tauInvs_m_Iom,one_m_tauInvs_m_Iom_Asym,rhos,Do_Ref):
     nSph            = np.int64(SPs['nSph']) 

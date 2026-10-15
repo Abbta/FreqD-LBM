@@ -132,8 +132,6 @@ def SingleSimulation(SPs):
 
     # OscBndPars = OscBnd.Setup_Boundaries_3D(SPs)
 
-    OscBndPars = SPs['OscBndPars']
-
     print('nx,ny,nz',SPs['nx'],SPs['ny'],SPs['nz'],'n',SPs['n'])
         # nu_for_om = 1./6.
         # SPs['delta'] = SPs['delta0_nm'] / SPs['Dx_nm'] / SPs['n']**0.5
@@ -141,6 +139,11 @@ def SingleSimulation(SPs):
 
     General.Calc_tauInvBulk_ZBulk(SPs)
     General.Calc_etaabstandel(SPs)
+    if SPs.get('ReferenceStabilityDiagnostic', False):
+        RingIn.Reference_Stability_Diagnostic(SPs)
+        return
+
+    OscBndPars = SPs['OscBndPars']
     if SPs['ProblemType'] == 'StiffParticles' : OscBnd.Calc_SphRespPars_3D(SPs,OscBndPars)
     if SPs['ProblemType'] == 'CylinderQCM3D' : OscBnd.Calc_CylRespPars_3D(SPs,OscBndPars)
 
